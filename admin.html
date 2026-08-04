@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin - LiveChat</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <section id="login-screen" class="screen">
+    <div class="login-card">
+      <h1>Admin LiveChat</h1>
+      <p>Masuk sebagai admin untuk membalas pesan customer.</p>
+      <input id="email-input" type="email" placeholder="Email" autocomplete="username" />
+      <input id="password-input" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="login-btn">Masuk</button>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </section>
+
+  <section id="app-screen" class="screen hidden">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <span id="admin-email"></span>
+        <button id="logout-btn">Keluar</button>
+      </div>
+      <ul id="customer-list"></ul>
+    </aside>
+
+    <main id="chat-panel">
+      <header id="chat-header">Pilih customer di sebelah kiri</header>
+      <div id="messages"></div>
+      <form id="message-form" class="hidden">
+        <input id="message-input" type="text" placeholder="Tulis balasan..." autocomplete="off" />
+        <button type="submit">Kirim</button>
+      </form>
+    </main>
+  </section>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

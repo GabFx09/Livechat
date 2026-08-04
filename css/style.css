@@ -57,7 +57,7 @@ html, body {
   margin: 0 0 20px;
 }
 
-#nickname-input {
+.login-card input {
   width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
@@ -107,14 +107,34 @@ html, body {
 }
 
 .sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-dim);
 }
 
 .sidebar-header strong {
   color: var(--text);
+}
+
+#logout-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+#logout-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
 }
 
 #user-list {
@@ -152,6 +172,42 @@ html, body {
 
 .dot.online { background: var(--online); }
 .dot.offline { background: var(--offline); }
+
+.customer-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.customer-item .name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.customer-item .preview {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.customer-item .badge {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.customer-item.waiting .name-row {
+  color: var(--text);
+}
 
 #chat-panel {
   flex: 1;
@@ -236,4 +292,19 @@ html, body {
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+}
+
+/* Standalone customer chat page (index.html) */
+#chat-screen {
+  display: flex;
+  justify-content: center;
+}
+
+#chat-screen .chat-container {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }

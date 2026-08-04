@@ -3,39 +3,32 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>LiveChat</title>
+<title>Customer Service</title>
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
   <section id="login-screen" class="screen">
     <div class="login-card">
-      <h1>LiveChat</h1>
-      <p>Masukkan nama panggilan untuk mulai mengobrol.</p>
-      <input id="nickname-input" type="text" placeholder="Nama panggilan" maxlength="24" autocomplete="off" />
-      <button id="login-btn">Masuk</button>
-      <p id="login-error" class="error hidden"></p>
+      <h1>Customer Service</h1>
+      <p>Masukkan nama Anda untuk mulai chat dengan tim kami.</p>
+      <input id="name-input" type="text" placeholder="Nama Anda" maxlength="40" autocomplete="off" />
+      <button id="start-btn">Mulai Chat</button>
+      <p id="start-error" class="error hidden"></p>
     </div>
   </section>
 
-  <section id="app-screen" class="screen hidden">
-    <aside id="sidebar">
-      <div class="sidebar-header">
-        <span>Masuk sebagai <strong id="my-nickname"></strong></span>
-      </div>
-      <ul id="user-list"></ul>
-    </aside>
-
-    <main id="chat-panel">
-      <header id="chat-header">Pilih seseorang untuk mulai chat</header>
+  <section id="chat-screen" class="screen hidden">
+    <div class="chat-container">
+      <header id="chat-header">Customer Service</header>
       <div id="messages"></div>
-      <form id="message-form" class="hidden">
+      <form id="message-form">
         <input id="message-input" type="text" placeholder="Tulis pesan..." autocomplete="off" />
         <button type="submit">Kirim</button>
       </form>
-    </main>
+    </div>
   </section>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/customer.js"></script>
 </body>
 </html>
