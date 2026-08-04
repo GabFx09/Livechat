@@ -1,4 +1,10 @@
 (function () {
+  // ==== Kustomisasi (boleh diedit manual) ====
+  var THEME_COLOR = "#5b8cff"; // warna bubble & header, isi kode hex warna brand Anda
+  var BRAND_NAME = "Live Chat"; // nama yang muncul di header jendela chat
+  var BUBBLE_ICON = "💬"; // emoji/simbol di tombol bubble
+  // ============================================
+
   var CHAT_ORIGIN = "https://gabfx09.github.io/Livechat";
   var CHAT_URL = CHAT_ORIGIN + "/index.html";
   var MOBILE_BREAKPOINT = 640;
@@ -10,8 +16,8 @@
   var bubble = document.createElement("button");
   bubble.id = "livechat-widget-bubble";
   bubble.type = "button";
-  bubble.setAttribute("aria-label", "Buka Live Chat");
-  bubble.textContent = "💬";
+  bubble.setAttribute("aria-label", "Buka " + BRAND_NAME);
+  bubble.textContent = BUBBLE_ICON;
 
   var panel = document.createElement("div");
   panel.id = "livechat-widget-panel";
@@ -20,7 +26,7 @@
   header.id = "livechat-widget-header";
 
   var headerTitle = document.createElement("span");
-  headerTitle.textContent = "Live Chat";
+  headerTitle.textContent = BRAND_NAME;
 
   var closeBtn = document.createElement("button");
   closeBtn.id = "livechat-widget-close";
@@ -33,7 +39,7 @@
 
   var iframe = document.createElement("iframe");
   iframe.id = "livechat-widget-iframe";
-  iframe.title = "Live Chat";
+  iframe.title = BRAND_NAME;
   iframe.allow = "clipboard-write";
 
   panel.appendChild(header);
@@ -77,7 +83,7 @@
   var style = document.createElement("style");
   style.textContent =
     "#livechat-widget-bubble{position:fixed;bottom:20px;right:20px;width:58px;height:58px;" +
-    "border-radius:50%;background:#5b8cff;color:#fff;border:none;font-size:26px;line-height:1;" +
+    "border-radius:50%;background:" + THEME_COLOR + ";color:#fff;border:none;font-size:26px;line-height:1;" +
     "cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:2147483000;" +
     "display:flex;align-items:center;justify-content:center;transition:transform .15s ease;}" +
     "#livechat-widget-bubble:hover{transform:scale(1.06);}" +
@@ -89,7 +95,7 @@
     "transition:opacity .15s ease,transform .15s ease;}" +
     "#livechat-widget-panel.livechat-widget-open{opacity:1;pointer-events:auto;transform:translateY(0);}" +
     "#livechat-widget-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;" +
-    "padding:14px 16px;background:#5b8cff;color:#fff;font-weight:600;" +
+    "padding:14px 16px;background:" + THEME_COLOR + ";color:#fff;font-weight:600;" +
     "font-family:-apple-system,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;}" +
     "#livechat-widget-close{background:transparent;border:none;color:#fff;font-size:16px;" +
     "cursor:pointer;line-height:1;padding:2px 4px;}" +

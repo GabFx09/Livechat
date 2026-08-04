@@ -108,6 +108,8 @@ Cara kerjanya:
 - Diklik → terbuka jendela chat kecil (iframe) di desktop, atau layar penuh di HP (lebar layar ≤640px) — supaya nyaman dipakai di mobile tanpa pindah tab/halaman.
 - Bisa dipasang di website mana pun (domain berbeda dari GitHub Pages), karena cukup memuat `index.html` lewat iframe dari `https://gabfx09.github.io/Livechat/`.
 - Kalau nanti ganti nama repo/username GitHub, update juga `CHAT_ORIGIN` di `js/widget.js`.
+- Warna bubble/header dan nama brand bisa diatur lewat 3 variabel di baris paling atas `js/widget.js`: `THEME_COLOR` (kode hex warna), `BRAND_NAME` (nama di header jendela chat), `BUBBLE_ICON` (emoji tombol bubble).
+- Untuk kebutuhan link langsung (tanpa widget) di HP — misal tombol "Chat via HP", bio WhatsApp, atau QR code — bisa langsung pakai URL `https://gabfx09.github.io/Livechat/`, tidak perlu setup tambahan.
 
 ## Catatan keamanan & batasan
 
