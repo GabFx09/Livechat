@@ -1,11 +1,11 @@
-// Ganti nilai-nilai di bawah ini dengan konfigurasi dari Firebase Console
+// Konfigurasi dari Firebase Console
 // (Project settings > General > Your apps > SDK setup and configuration).
 // Lihat README.md untuk langkah lengkapnya.
 export const firebaseConfig = {
-  apiKey: "GANTI_DENGAN_API_KEY",
-  authDomain: "GANTI_DENGAN_AUTH_DOMAIN",
-  projectId: "GANTI_DENGAN_PROJECT_ID",
-  storageBucket: "GANTI_DENGAN_STORAGE_BUCKET",
-  messagingSenderId: "GANTI_DENGAN_SENDER_ID",
-  appId: "GANTI_DENGAN_APP_ID"
+  apiKey: "AIzaSyCmrrJNI0HofJlPaXwWJwMGZuUobhAXzbk",
+  authDomain: "livechat-saya.firebaseapp.com",
+  projectId: "livechat-saya",
+  storageBucket: "livechat-saya.firebasestorage.app",
+  messagingSenderId: "47824287496",
+  appId: "1:47824287496:web:b39cc34886dfa1c140debd"
 };
