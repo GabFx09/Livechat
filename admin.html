@@ -9,34 +9,102 @@
 <body>
 
   <section id="login-screen" class="screen">
-    <div class="login-card">
-      <h1>Admin LiveChat</h1>
-      <p>Masuk sebagai admin untuk membalas pesan customer.</p>
-      <input id="email-input" type="email" placeholder="Email" autocomplete="username" />
-      <input id="password-input" type="password" placeholder="Password" autocomplete="current-password" />
-      <button id="login-btn">Masuk</button>
-      <p id="login-error" class="error hidden"></p>
+    <div class="auth-layout">
+      <div class="auth-brand">
+        <div class="auth-brand-icon">🛠</div>
+        <h1>LiveChat Admin</h1>
+        <p>Portal admin untuk mengelola dan membalas percakapan customer secara real-time, dari mana saja.</p>
+      </div>
+      <div class="auth-form-panel">
+        <div class="auth-form-card">
+          <h2>Masuk ke Dashboard</h2>
+          <p class="auth-subtitle">Gunakan akun admin yang sudah terdaftar.</p>
+          <label class="auth-label" for="email-input">Email</label>
+          <input id="email-input" type="email" placeholder="admin@perusahaan.com" autocomplete="username" />
+          <label class="auth-label" for="password-input">Password</label>
+          <input id="password-input" type="password" placeholder="••••••••" autocomplete="current-password" />
+          <button id="login-btn">Masuk</button>
+          <p id="login-error" class="error hidden"></p>
+        </div>
+      </div>
     </div>
   </section>
 
   <section id="app-screen" class="screen hidden">
     <aside id="sidebar">
       <div class="sidebar-header">
-        <span id="admin-email"></span>
-        <button id="logout-btn">Keluar</button>
+        <div class="sidebar-identity">
+          <div id="sidebar-avatar" class="avatar-preview avatar-small"></div>
+          <span id="admin-email"></span>
+        </div>
+        <div class="header-actions">
+          <button id="settings-btn" type="button" title="Pengaturan">⚙</button>
+          <button id="logout-btn" type="button">Keluar</button>
+        </div>
       </div>
-      <ul id="customer-list"></ul>
+      <div class="sidebar-body">
+        <div class="icon-rail">
+          <button id="tab-active-btn" type="button" class="rail-icon-btn active" title="Aktif">💬</button>
+          <button id="tab-archived-btn" type="button" class="rail-icon-btn" title="Arsip">🗄</button>
+        </div>
+        <ul id="customer-list"></ul>
+      </div>
     </aside>
 
     <main id="chat-panel">
-      <header id="chat-header">Pilih customer di sebelah kiri</header>
+      <header id="chat-header">
+        <span id="chat-header-text">Pilih customer di sebelah kiri</span>
+        <button id="info-toggle-btn" type="button" class="header-icon-btn hidden" title="Info customer">ℹ</button>
+      </header>
       <div id="messages"></div>
       <form id="message-form" class="hidden">
-        <input id="message-input" type="text" placeholder="Tulis balasan..." autocomplete="off" />
+        <div id="reply-suggestions" class="reply-suggestions hidden"></div>
+        <label class="attach-btn" for="image-input" title="Kirim gambar">📎</label>
+        <input id="image-input" type="file" accept="image/*" class="hidden" />
+        <button id="saved-replies-btn" type="button" class="attach-btn" title="Saved Replies (Ctrl+/)">⚡</button>
+        <input id="message-input" type="text" placeholder="Tulis balasan... (Ctrl+/ untuk saved replies)" autocomplete="off" />
         <button type="submit">Kirim</button>
       </form>
     </main>
+
+    <aside id="customer-panel" class="hidden">
+      <div class="customer-panel-header">
+        <span>Info Customer</span>
+        <button id="info-close-btn" type="button" class="header-icon-btn">✕</button>
+      </div>
+      <div id="customer-panel-body"></div>
+    </aside>
   </section>
+
+  <div id="settings-overlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2>Pengaturan Admin</h2>
+      <div class="avatar-preview-wrap">
+        <div id="avatar-preview" class="avatar-preview"></div>
+      </div>
+      <label class="file-btn" for="photo-input">Ganti foto profil</label>
+      <input id="photo-input" type="file" accept="image/*" class="hidden" />
+      <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
+      <div class="modal-actions">
+        <button id="settings-cancel-btn" type="button" class="btn-secondary">Batal</button>
+        <button id="settings-save-btn" type="button">Simpan</button>
+      </div>
+      <p id="settings-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <div id="saved-replies-overlay" class="modal-overlay hidden">
+    <div class="modal-card saved-replies-card">
+      <h2>Saved Replies</h2>
+      <p class="hint">Tekan <kbd>Ctrl</kbd>+<kbd>/</kbd> kapan saja untuk buka ini. Klik salah satu balasan untuk memasukkannya ke kolom pesan.</p>
+      <ul id="saved-replies-list"></ul>
+      <form id="saved-reply-form">
+        <input id="saved-reply-input" type="text" placeholder="Tulis balasan baru..." maxlength="500" autocomplete="off" />
+        <button type="submit">Simpan</button>
+      </form>
+      <button id="saved-replies-close-btn" type="button" class="btn-secondary">Tutup</button>
+    </div>
+  </div>
 
   <script type="module" src="js/admin.js"></script>
 </body>

@@ -9,12 +9,22 @@
 <body>
 
   <section id="login-screen" class="screen">
-    <div class="login-card">
-      <h1>Customer Service</h1>
-      <p>Masukkan nama Anda untuk mulai chat dengan tim kami.</p>
-      <input id="name-input" type="text" placeholder="Nama Anda" maxlength="40" autocomplete="off" />
-      <button id="start-btn">Mulai Chat</button>
-      <p id="start-error" class="error hidden"></p>
+    <div class="auth-layout">
+      <div class="auth-brand">
+        <div class="auth-brand-icon">💬</div>
+        <h1>Customer Service</h1>
+        <p>Tim kami siap membantu Anda secara real-time. Masukkan username untuk memulai percakapan dengan tim customer service kami.</p>
+      </div>
+      <div class="auth-form-panel">
+        <div class="auth-form-card">
+          <h2>Mulai Chat</h2>
+          <p class="auth-subtitle">Masukkan username Anda untuk terhubung dengan tim kami.</p>
+          <label class="auth-label" for="name-input">Username</label>
+          <input id="name-input" type="text" placeholder="mis. budi123" maxlength="40" autocomplete="off" />
+          <button id="start-btn">Mulai Chat</button>
+          <p id="start-error" class="error hidden"></p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -23,6 +33,8 @@
       <header id="chat-header">Customer Service</header>
       <div id="messages"></div>
       <form id="message-form">
+        <label class="attach-btn" for="image-input" title="Kirim gambar">📎</label>
+        <input id="image-input" type="file" accept="image/*" class="hidden" />
         <input id="message-input" type="text" placeholder="Tulis pesan..." autocomplete="off" />
         <button type="submit">Kirim</button>
       </form>

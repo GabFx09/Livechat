@@ -14,9 +14,11 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  increment
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { compressImageFile, showImageLightbox } from "./image-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -29,25 +31,143 @@ const chatScreen = document.getElementById("chat-screen");
 const nameInput = document.getElementById("name-input");
 const startBtn = document.getElementById("start-btn");
 const startError = document.getElementById("start-error");
+const chatHeader = document.getElementById("chat-header");
 const messagesEl = document.getElementById("messages");
 const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
-
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
+const imageInput = document.getElementById("image-input");
 
 function showStartError(message) {
   startError.textContent = message;
   startError.classList.remove("hidden");
 }
 
+// Ambil IP & perkiraan lokasi dari layanan lookup publik (tanpa perlu izin
+// browser, beda dengan navigator.geolocation). Dipakai admin saja untuk
+// konteks tambahan. Coba ipapi.co dulu, kalau gagal/diblokir (mis. oleh
+// ad-blocker) coba ipwho.is sebagai cadangan, gagal-diamkan kalau dua-duanya
+// tidak bisa diakses supaya tidak menghalangi customer chat.
+async function fetchVisitorInfo() {
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.error && data.ip) {
+        return { ip: data.ip, city: data.city || null, region: data.region || null, country: data.country_name || null };
+      }
+    }
+  } catch (err) {
+    // lanjut coba layanan cadangan
+  }
+
+  try {
+    const res = await fetch("https://ipwho.is/");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success !== false && data.ip) {
+        return { ip: data.ip, city: data.city || null, region: data.region || null, country: data.country || null };
+      }
+    }
+  } catch (err) {
+    // kedua layanan gagal
+  }
+
+  return null;
+}
+
+async function captureVisitorInfo(uid) {
+  const info = await fetchVisitorInfo();
+  if (!info) {
+    console.warn("Gagal mengambil info IP/lokasi customer (layanan lookup tidak bisa diakses).");
+    return;
+  }
+  try {
+    await setDoc(doc(db, "customers", uid), info, { merge: true });
+  } catch (err) {
+    console.error("Gagal menyimpan info IP/lokasi:", err);
+  }
+}
+
+function formatTimeWIB(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "";
+  return (
+    timestamp.toDate().toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Jakarta"
+    }) + " WIB"
+  );
+}
+
+function renderMessage(m) {
+  const div = document.createElement("div");
+  div.className = "message " + (m.sender === "customer" ? "mine" : "theirs");
+
+  const senderRow = document.createElement("div");
+  senderRow.className = "sender-row";
+
+  if (m.sender === "admin" && m.senderPhoto) {
+    const avatar = document.createElement("img");
+    avatar.className = "msg-avatar";
+    avatar.src = m.senderPhoto;
+    senderRow.appendChild(avatar);
+  }
+
+  const senderLabel = document.createElement("span");
+  senderLabel.className = "sender";
+  senderLabel.textContent = m.sender === "customer" ? "Anda" : m.senderName || "Customer Service";
+  senderRow.appendChild(senderLabel);
+
+  if (m.edited) {
+    const editedBadge = document.createElement("span");
+    editedBadge.className = "edited-badge";
+    editedBadge.textContent = "(diedit)";
+    senderRow.appendChild(editedBadge);
+  }
+
+  div.appendChild(senderRow);
+
+  if (m.type === "image" && m.imageBase64) {
+    const img = document.createElement("img");
+    img.className = "chat-image";
+    img.src = m.imageBase64;
+    img.addEventListener("click", () => showImageLightbox(m.imageBase64));
+    div.appendChild(img);
+  } else {
+    const p = document.createElement("p");
+    p.textContent = m.text || "";
+    div.appendChild(p);
+  }
+
+  const timeEl = document.createElement("span");
+  timeEl.className = "msg-time";
+  timeEl.textContent = formatTimeWIB(m.timestamp);
+  div.appendChild(timeEl);
+
+  return div;
+}
+
+let knownAdminInfo = null;
+
+function updateChatHeader() {
+  chatHeader.innerHTML = "";
+  if (knownAdminInfo && knownAdminInfo.photo) {
+    const avatar = document.createElement("img");
+    avatar.className = "header-avatar";
+    avatar.src = knownAdminInfo.photo;
+    chatHeader.appendChild(avatar);
+  }
+  const span = document.createElement("span");
+  span.textContent = (knownAdminInfo && knownAdminInfo.name) || "Customer Service";
+  chatHeader.appendChild(span);
+}
+
 function enterChat(uid, name) {
   currentUser = { uid, name };
   loginScreen.classList.add("hidden");
   chatScreen.classList.remove("hidden");
+  updateChatHeader();
   listenMessages();
 }
 
@@ -58,17 +178,37 @@ function listenMessages() {
   );
   onSnapshot(q, (snap) => {
     messagesEl.innerHTML = "";
+    let latestAdminInfo = null;
     snap.forEach((docSnap) => {
       const m = docSnap.data();
-      const div = document.createElement("div");
-      div.className = "message " + (m.sender === "customer" ? "mine" : "theirs");
-      div.innerHTML =
-        `<span class="sender">${m.sender === "customer" ? "Anda" : "Customer Service"}</span>` +
-        `<p>${escapeHtml(m.text)}</p>`;
-      messagesEl.appendChild(div);
+      messagesEl.appendChild(renderMessage(m));
+      if (m.sender === "admin") {
+        latestAdminInfo = { name: m.senderName, photo: m.senderPhoto };
+      }
     });
+    if (latestAdminInfo) {
+      knownAdminInfo = latestAdminInfo;
+      updateChatHeader();
+    }
     messagesEl.scrollTop = messagesEl.scrollHeight;
   });
+}
+
+async function touchCustomerDoc(lastMessage) {
+  await setDoc(
+    doc(db, "customers", currentUser.uid),
+    {
+      name: currentUser.name,
+      lastMessage,
+      lastMessageAt: serverTimestamp(),
+      lastSender: "customer",
+      unreadCount: increment(1),
+      archived: false,
+      archivedAt: null,
+      expireAt: null
+    },
+    { merge: true }
+  );
 }
 
 messageForm.addEventListener("submit", async (e) => {
@@ -80,28 +220,47 @@ messageForm.addEventListener("submit", async (e) => {
   try {
     await addDoc(collection(db, "chats", currentUser.uid, "messages"), {
       sender: "customer",
+      type: "text",
       text,
       timestamp: serverTimestamp()
     });
-    await setDoc(
-      doc(db, "customers", currentUser.uid),
-      {
-        name: currentUser.name,
-        lastMessage: text,
-        lastMessageAt: serverTimestamp(),
-        lastSender: "customer"
-      },
-      { merge: true }
-    );
   } catch (err) {
-    alert("Gagal mengirim pesan: " + err.message);
+    console.error("Gagal addDoc ke chats/" + currentUser.uid + "/messages:", err);
+    alert("Gagal mengirim pesan (tulis chat): " + err.code + " - " + err.message);
+    return;
+  }
+
+  try {
+    await touchCustomerDoc(text);
+  } catch (err) {
+    console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
+    alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
+  }
+});
+
+imageInput.addEventListener("change", async () => {
+  const file = imageInput.files[0];
+  imageInput.value = "";
+  if (!file || !currentUser) return;
+
+  try {
+    const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
+    await addDoc(collection(db, "chats", currentUser.uid, "messages"), {
+      sender: "customer",
+      type: "image",
+      imageBase64: dataUrl,
+      timestamp: serverTimestamp()
+    });
+    await touchCustomerDoc("📷 Gambar");
+  } catch (err) {
+    alert(err.message || "Gagal mengirim gambar.");
   }
 });
 
 startBtn.addEventListener("click", async () => {
   const name = nameInput.value.trim();
   if (!name) {
-    showStartError("Nama tidak boleh kosong.");
+    showStartError("Username tidak boleh kosong.");
     return;
   }
 
@@ -125,6 +284,7 @@ startBtn.addEventListener("click", async () => {
       { merge: true }
     );
     enterChat(user.uid, name);
+    captureVisitorInfo(user.uid);
   } catch (err) {
     showStartError("Gagal memulai chat: " + err.message);
     startBtn.disabled = false;
@@ -142,6 +302,7 @@ onAuthStateChanged(auth, async (user) => {
     const snap = await getDoc(doc(db, "customers", user.uid));
     if (snap.exists() && snap.data().name) {
       enterChat(user.uid, snap.data().name);
+      captureVisitorInfo(user.uid);
     }
   } catch (err) {
     // Ignore: user will just see the start screen.

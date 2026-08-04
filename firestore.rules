@@ -7,11 +7,19 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Daftar admin ditambahkan manual lewat Firebase Console (Firestore > Data),
-    // tidak bisa dibuat/ditulis dari aplikasi client demi keamanan.
+    // Dokumen admin dibuat manual lewat Firebase Console (Firestore > Data),
+    // tidak bisa dibuat dari aplikasi client demi keamanan. Admin yang
+    // bersangkutan boleh mengubah profilnya sendiri (nama tampilan, foto).
     match /admins/{adminId} {
       allow read: if request.auth != null && request.auth.uid == adminId;
-      allow write: if false;
+      allow create: if false;
+      allow update: if request.auth != null && request.auth.uid == adminId;
+      allow delete: if false;
+
+      // Saved replies (balasan cepat) milik admin itu sendiri.
+      match /savedReplies/{replyId} {
+        allow read, write: if request.auth != null && request.auth.uid == adminId;
+      }
     }
 
     // customers/{customerId} = profil singkat tiap pengunjung (nama, pesan terakhir, dst).
@@ -26,17 +34,28 @@ service cloud.firestore {
     }
 
     // chats/{customerId}/messages = isi percakapan customer tsb dengan admin.
+    // Pesan bertipe teks (field text) atau gambar (field imageBase64).
+    // Admin boleh edit/hapus pesan miliknya sendiri saja (senderId == uid-nya).
     match /chats/{customerId}/messages/{messageId} {
       allow read: if request.auth != null &&
         (request.auth.uid == customerId || isAdmin());
 
       allow create: if request.auth != null &&
+        request.resource.data.type in ['text', 'image'] &&
         (
           (request.auth.uid == customerId && request.resource.data.sender == 'customer') ||
-          (isAdmin() && request.resource.data.sender == 'admin')
+          (isAdmin() && request.resource.data.sender == 'admin' &&
+            request.resource.data.senderId == request.auth.uid)
         );
 
-      allow update, delete: if false;
+      allow update: if request.auth != null && isAdmin() &&
+        resource.data.sender == 'admin' &&
+        resource.data.senderId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt']);
+
+      allow delete: if request.auth != null && isAdmin() &&
+        resource.data.sender == 'admin' &&
+        resource.data.senderId == request.auth.uid;
     }
   }
 }
