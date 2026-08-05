@@ -46,8 +46,10 @@ let presenceIntervalId = null;
 const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis diarsipkan
 
 // Customer dianggap online kalau lastActiveAt (heartbeat dari widget/customer.js
-// tiap 20 detik selagi tab-nya aktif) masih dalam 45 detik terakhir.
-const PRESENCE_ONLINE_MS = 45 * 1000;
+// tiap 10 detik selagi tab-nya aktif) masih dalam 25 detik terakhir. Ini cuma
+// fallback (koneksi putus/tab crash) -- kasus normal (tab ditutup/dipindah)
+// sudah langsung ketahuan offline lewat sendOfflineSignal() di customer.js.
+const PRESENCE_ONLINE_MS = 25 * 1000;
 
 function isCustomerOnline(data) {
   if (!data || !data.lastActiveAt) return false;
@@ -375,7 +377,7 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   presenceIntervalId = setInterval(() => {
     renderCustomerList();
     updateChatHeaderPresence();
-  }, 15000);
+  }, 5000);
 
   applyRoute();
 }

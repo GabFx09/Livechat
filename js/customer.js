@@ -256,11 +256,11 @@ function enterChat(uid, name) {
   startPresenceHeartbeat();
 }
 
-// Kirim lastActiveAt tiap 20 detik selagi tab chat ini sedang aktif/terlihat,
+// Kirim lastActiveAt tiap 10 detik selagi tab chat ini sedang aktif/terlihat,
 // dipakai admin utk menandai customer online/offline di admin.js (lihat
 // isCustomerOnline). Tidak dikirim saat tab di-background supaya statusnya
 // jujur mencerminkan customer masih benar-benar di halaman chat.
-const PRESENCE_HEARTBEAT_MS = 20000;
+const PRESENCE_HEARTBEAT_MS = 10000;
 function sendHeartbeat() {
   if (!currentUser || document.visibilityState !== "visible") return;
   setDoc(
@@ -269,10 +269,30 @@ function sendHeartbeat() {
     { merge: true }
   ).catch(() => {});
 }
+
+// Begitu tab di-background/ditutup, langsung tandai offline (bukan nunggu
+// heartbeat basi) supaya admin lihat statusnya berubah nyaris seketika lewat
+// realtime listener, bukan lewat threshold basi di admin.js.
+function sendOfflineSignal() {
+  if (!currentUser) return;
+  setDoc(
+    doc(db, ...wsPath("customers", currentUser.uid)),
+    { lastActiveAt: null },
+    { merge: true }
+  ).catch(() => {});
+}
+
 function startPresenceHeartbeat() {
   sendHeartbeat();
   setInterval(sendHeartbeat, PRESENCE_HEARTBEAT_MS);
-  document.addEventListener("visibilitychange", sendHeartbeat);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      sendHeartbeat();
+    } else {
+      sendOfflineSignal();
+    }
+  });
+  window.addEventListener("pagehide", sendOfflineSignal);
 }
 
 function listenMessages() {
