@@ -1106,6 +1106,22 @@ html, body {
   z-index: 2;
 }
 
+#message-form.locked {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.session-ended-banner {
+  margin: 0;
+  padding: 10px 20px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e5484d;
+  background: rgba(229, 72, 77, 0.1);
+  border-top: 1px solid var(--border);
+}
+
 .reply-suggestions {
   position: absolute;
   left: 16px;

@@ -59,6 +59,7 @@ const messagesEl = document.getElementById("messages");
 const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
+const sessionEndedBanner = document.getElementById("session-ended-banner");
 const brandNameEls = document.querySelectorAll("[data-brand-name]");
 
 function wsPath(...segments) {
@@ -273,10 +274,14 @@ function listenSessionAlive(uid) {
   });
 }
 
+// Sengaja TIDAK melempar customer balik ke layar login -- tetap di layar
+// chat (biar riwayat pesan yg sempat kebaca tetap kelihatan), tapi form
+// dikunci total dan dikasih keterangan "sesi telah habis". Supaya bisa chat
+// lagi, customer harus benar-benar tutup tab & buka ulang link-nya (itu yang
+// bikin sesi baru dari nol), bukan cuma klik tombol di halaman yang sama.
 function handleSessionDeleted() {
   if (!sessionActive) return; // sudah ditangani / belum pernah mulai chat
   sessionActive = false;
-  currentUser = null;
 
   if (unsubMessages) unsubMessages();
   if (unsubCustomerDoc) unsubCustomerDoc();
@@ -285,11 +290,10 @@ function handleSessionDeleted() {
   unsubCustomerDoc = null;
   presenceIntervalId = null;
 
-  messagesEl.innerHTML = "";
-  chatScreen.classList.add("hidden");
-  nameInput.value = "";
-  loginScreen.classList.remove("hidden");
-  showStartError("Percakapan ini telah dihapus oleh admin. Silakan mulai chat baru.");
+  messageInput.disabled = true;
+  imageInput.disabled = true;
+  messageForm.classList.add("locked");
+  sessionEndedBanner.classList.remove("hidden");
 }
 
 // Kirim lastActiveAt tiap 10 detik selagi tab chat ini sedang aktif/terlihat,
