@@ -973,8 +973,10 @@ onAuthStateChanged(auth, async (user) => {
     const resolved = await resolveAdminWorkspace(user.uid);
     if (resolved) {
       await enterDashboard(user.uid, user.email, resolved.workspaceId, resolved.adminData);
+    } else {
+      console.warn("Auto re-enter dashboard: uid ini tidak terdaftar di adminIndex/workspace manapun.", user.uid);
     }
   } catch (err) {
-    // Ignore: admin will just see the login screen.
+    console.error("Auto re-enter dashboard gagal:", err);
   }
 });

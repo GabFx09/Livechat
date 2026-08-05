@@ -46,6 +46,19 @@ function wsPath(...segments) {
   return ["workspaces", workspaceId, ...segments];
 }
 
+// Satu-satunya titik yang boleh memicu signInAnonymously, supaya init() (yang
+// jalan otomatis saat halaman dibuka) dan tombol "Mulai Chat" (diklik user)
+// tidak pernah balapan membuat dua sesi anonim berbeda di saat bersamaan.
+let signInPromise = null;
+function ensureSignedIn() {
+  if (!signInPromise) {
+    signInPromise = auth.currentUser
+      ? Promise.resolve(auth.currentUser)
+      : signInAnonymously(auth).then((cred) => cred.user);
+  }
+  return signInPromise;
+}
+
 function showStartError(message) {
   startError.textContent = message;
   startError.classList.remove("hidden");
@@ -285,11 +298,7 @@ startBtn.addEventListener("click", async () => {
   startError.classList.add("hidden");
 
   try {
-    let user = auth.currentUser;
-    if (!user) {
-      const cred = await signInAnonymously(auth);
-      user = cred.user;
-    }
+    const user = await ensureSignedIn();
     await setDoc(
       doc(db, ...wsPath("customers", user.uid)),
       {
@@ -320,17 +329,17 @@ async function init() {
   }
 
   try {
-    const cred = auth.currentUser ? { user: auth.currentUser } : await signInAnonymously(auth);
+    const user = await ensureSignedIn();
     const wsSnap = await getDoc(doc(db, ...wsPath()));
     if (wsSnap.exists() && wsSnap.data().brandName) {
       applyBrandName(wsSnap.data().brandName);
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
-    const customerSnap = await getDoc(doc(db, ...wsPath("customers", cred.user.uid)));
+    const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     if (customerSnap.exists() && customerSnap.data().name) {
-      enterChat(cred.user.uid, customerSnap.data().name);
-      captureVisitorInfo(cred.user.uid);
+      enterChat(user.uid, customerSnap.data().name);
+      captureVisitorInfo(user.uid);
     }
   } catch (err) {
     console.error("Gagal memuat workspace:", err);
