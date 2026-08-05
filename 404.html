@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Customer Service</title>
+<link rel="stylesheet" href="/Livechat/css/style.css" />
+</head>
+<body>
+
+  <section id="loading-screen" class="screen">
+    <p class="loading-text">Memuat...</p>
+  </section>
+
+  <section id="workspace-error-screen" class="screen hidden">
+    <div class="auth-layout">
+      <div class="auth-form-panel" style="width: 100%;">
+        <div class="auth-form-card" style="text-align: center; max-width: 380px;">
+          <h2>Workspace tidak ditemukan</h2>
+          <p class="auth-subtitle">Link ini tidak menyertakan ID workspace yang valid. Hubungi penyedia livechat Anda untuk mendapatkan link/kode widget yang benar.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="login-screen" class="screen hidden">
+    <div class="auth-layout">
+      <div class="auth-brand">
+        <div class="auth-brand-icon">💬</div>
+        <h1 data-brand-name>Customer Service</h1>
+        <p>Tim kami siap membantu Anda secara real-time. Masukkan username untuk memulai percakapan dengan tim customer service kami.</p>
+      </div>
+      <div class="auth-form-panel">
+        <div class="auth-form-card">
+          <h2>Mulai Chat</h2>
+          <p class="auth-subtitle">Masukkan username Anda untuk terhubung dengan tim kami.</p>
+          <label class="auth-label" for="name-input">Username</label>
+          <input id="name-input" type="text" placeholder="mis. budi123" maxlength="40" autocomplete="off" />
+          <button id="start-btn">Mulai Chat</button>
+          <p id="start-error" class="error hidden"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="chat-screen" class="screen hidden">
+    <div class="chat-container">
+      <header id="chat-header">Customer Service</header>
+      <div id="messages"></div>
+      <form id="message-form">
+        <label class="attach-btn" for="image-input" title="Kirim gambar">📎</label>
+        <input id="image-input" type="file" accept="image/*" class="hidden" />
+        <input id="message-input" type="text" placeholder="Tulis pesan..." autocomplete="off" />
+        <button type="submit">Kirim</button>
+      </form>
+    </div>
+  </section>
+
+  <script type="module" src="/Livechat/js/customer.js"></script>
+</body>
+</html>

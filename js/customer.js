@@ -24,7 +24,20 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const workspaceId = new URLSearchParams(window.location.search).get("w");
+// Terima workspace ID dari query string (?w=ID) ATAU dari URL bersih
+// (/Livechat/ID/, dilayani lewat trik 404.html karena GitHub Pages tidak
+// mendukung URL dinamis native). Query string diprioritaskan kalau ada.
+function extractWorkspaceIdFromPath() {
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  const BASE_SEGMENTS = 1; // situs ini di-host di /Livechat/, 1 segmen dasar
+  if (segments.length <= BASE_SEGMENTS) return null;
+  const last = segments[segments.length - 1];
+  if (last === "index.html" || last === "404.html") return null;
+  return last;
+}
+
+const workspaceId =
+  new URLSearchParams(window.location.search).get("w") || extractWorkspaceIdFromPath();
 
 let currentUser = null; // { uid, name }
 let workspaceBrandName = null;
