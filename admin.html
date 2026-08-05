@@ -95,6 +95,7 @@
       <nav class="settings-sub-nav">
         <a href="#/settings/profile" class="settings-sub-nav-btn active">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
+        <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
       </nav>
     </header>
 
@@ -122,6 +123,7 @@
       <nav class="settings-sub-nav">
         <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn active">Appearance</a>
+        <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
       </nav>
     </header>
 
@@ -139,6 +141,32 @@
         <input id="appearance-icon-input" type="text" placeholder="💬" maxlength="4" />
         <button id="appearance-save-btn" type="button">Simpan Appearance</button>
         <p id="appearance-error" class="error hidden"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="settings-autochat-view" class="screen hidden">
+    <header class="settings-view-header">
+      <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
+      <span>Pengaturan</span>
+      <nav class="settings-sub-nav">
+        <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
+        <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
+        <a href="#/settings/autochat" class="settings-sub-nav-btn active">Auto-Chat</a>
+      </nav>
+    </header>
+
+    <div class="settings-view-body">
+      <div class="settings-panel">
+        <p class="settings-hint">Kirim sapaan otomatis begitu customer baru pertama kali membuka chat, sebelum mereka mengetik apa pun. Tidak dikirim ulang untuk customer lama yang sudah pernah chat.</p>
+        <label class="settings-checkbox-row" for="autochat-enabled-input">
+          <input id="autochat-enabled-input" type="checkbox" />
+          <span>Aktifkan sapaan otomatis</span>
+        </label>
+        <label class="auth-label" for="autochat-message-input">Pesan Sapaan</label>
+        <textarea id="autochat-message-input" rows="4" maxlength="500" placeholder="mis. Halo! Selamat datang di Toko ABC, ada yang bisa kami bantu?"></textarea>
+        <button id="autochat-save-btn" type="button">Simpan Auto-Chat</button>
+        <p id="autochat-error" class="error hidden"></p>
       </div>
     </div>
   </section>

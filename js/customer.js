@@ -42,6 +42,8 @@ const workspaceId =
 
 let currentUser = null; // { uid, name }
 let workspaceBrandName = null;
+let autoGreetingEnabled = false;
+let autoGreetingMessage = "";
 let sessionActive = false; // false = belum chat, atau sesi dihapus admin & belum mulai ulang
 let unsubMessages = null;
 let unsubCustomerDoc = null;
@@ -488,6 +490,16 @@ startBtn.addEventListener("click", async () => {
     if (isNewCustomer) bumpStat("newCustomers");
     enterChat(user.uid, name);
     captureVisitorInfo(user.uid);
+
+    if (isNewCustomer && autoGreetingEnabled && autoGreetingMessage) {
+      addDoc(collection(db, ...wsPath("chats", user.uid, "messages")), {
+        sender: "admin",
+        type: "text",
+        text: autoGreetingMessage,
+        timestamp: serverTimestamp(),
+        autoGreeting: true
+      }).catch(() => {});
+    }
   } catch (err) {
     showStartError("Gagal memulai chat: " + err.message);
     startBtn.disabled = false;
@@ -512,6 +524,8 @@ async function init() {
       const wsData = wsSnap.data();
       if (wsData.brandName) applyBrandName(wsData.brandName);
       if (wsData.themeColor) applyThemeColor(wsData.themeColor);
+      autoGreetingEnabled = !!wsData.autoGreetingEnabled;
+      autoGreetingMessage = wsData.autoGreetingMessage || "";
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.

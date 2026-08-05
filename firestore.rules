@@ -13,7 +13,8 @@ service cloud.firestore {
     // workspaces/{workspaceId} = 1 dokumen per perusahaan (nama, brandName,
     // themeColor, bubbleIcon, dst). Dokumennya sendiri dibuat manual oleh
     // pemilik platform, tapi field appearance (brandName/themeColor/bubbleIcon)
-    // boleh diedit admin workspace tsb lewat menu Pengaturan > Appearance.
+    // dan sapaan otomatis (autoGreetingEnabled/autoGreetingMessage) boleh
+    // diedit admin workspace tsb lewat menu Pengaturan > Appearance/Auto-Chat.
     // Read dibuka publik (tanpa perlu login) supaya widget.js di website
     // perusahaan bisa ambil branding-nya tanpa proses auth dulu.
     match /workspaces/{workspaceId} {
@@ -27,7 +28,9 @@ service cloud.firestore {
       }
 
       allow update: if isWorkspaceAdmin() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['brandName', 'themeColor', 'bubbleIcon']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage']
+        );
 
       // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa
       // dibuat dari aplikasi client. Admin yang bersangkutan boleh
@@ -78,6 +81,19 @@ service cloud.firestore {
           request.resource.data.sender == 'admin' &&
           request.resource.data.senderId == request.auth.uid &&
           request.resource.data.type in ['text', 'image'];
+
+        // Sapaan otomatis (fitur Pengaturan > Auto-Chat): customer sendiri
+        // yang nulis pesan ini (bukan admin asli, makanya tidak ada
+        // senderId), tapi teksnya wajib sama persis dengan autoGreetingMessage
+        // yang di-set admin di workspace doc -- customer tidak bisa
+        // menyamar jadi admin dengan teks bebas.
+        allow create: if request.auth != null &&
+          request.auth.uid == customerId &&
+          request.resource.data.sender == 'admin' &&
+          request.resource.data.type == 'text' &&
+          request.resource.data.autoGreeting == true &&
+          request.resource.data.text ==
+            get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.autoGreetingMessage;
 
         allow update: if isWorkspaceAdmin() &&
           resource.data.sender == 'admin' &&

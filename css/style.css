@@ -1390,6 +1390,37 @@ html, body {
   line-height: 1.5;
 }
 
+.settings-panel input[type="text"],
+.settings-panel textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  margin-bottom: 14px;
+  resize: vertical;
+}
+
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .color-input-row {
   display: flex;
   gap: 8px;

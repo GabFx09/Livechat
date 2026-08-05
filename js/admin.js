@@ -120,6 +120,7 @@ const customerSearchInput = document.getElementById("customer-search-input");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsProfileView = document.getElementById("settings-profile-view");
 const settingsAppearanceView = document.getElementById("settings-appearance-view");
+const settingsAutochatView = document.getElementById("settings-autochat-view");
 const avatarPreview = document.getElementById("avatar-preview");
 const photoInput = document.getElementById("photo-input");
 const displayNameInput = document.getElementById("display-name-input");
@@ -133,6 +134,11 @@ const appearanceColorText = document.getElementById("appearance-color-text");
 const appearanceIconInput = document.getElementById("appearance-icon-input");
 const appearanceSaveBtn = document.getElementById("appearance-save-btn");
 const appearanceError = document.getElementById("appearance-error");
+
+const autochatEnabledInput = document.getElementById("autochat-enabled-input");
+const autochatMessageInput = document.getElementById("autochat-message-input");
+const autochatSaveBtn = document.getElementById("autochat-save-btn");
+const autochatError = document.getElementById("autochat-error");
 
 const savedRepliesBtn = document.getElementById("saved-replies-btn");
 const savedRepliesOverlay = document.getElementById("saved-replies-overlay");
@@ -204,7 +210,8 @@ document.addEventListener("keydown", unlockAudioOnFirstInteraction);
 function isSettingsOpen() {
   return (
     !settingsProfileView.classList.contains("hidden") ||
-    !settingsAppearanceView.classList.contains("hidden")
+    !settingsAppearanceView.classList.contains("hidden") ||
+    !settingsAutochatView.classList.contains("hidden")
   );
 }
 
@@ -360,6 +367,8 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
       currentAdmin.workspaceBrandName = wsData.brandName || wsData.name || "";
       currentAdmin.workspaceThemeColor = wsData.themeColor || "#5b8cff";
       currentAdmin.workspaceBubbleIcon = wsData.bubbleIcon || "💬";
+      currentAdmin.autoGreetingEnabled = !!wsData.autoGreetingEnabled;
+      currentAdmin.autoGreetingMessage = wsData.autoGreetingMessage || "";
       if (currentAdmin.workspaceName) document.title = currentAdmin.workspaceName + " - Admin";
     }
   } catch (err) {
@@ -1288,6 +1297,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   railUnreadBadge.classList.add("hidden");
   settingsProfileView.classList.add("hidden");
   settingsAppearanceView.classList.add("hidden");
+  settingsAutochatView.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
   statsView.classList.add("hidden");
   customerPanel.classList.add("hidden");
@@ -1331,6 +1341,7 @@ function applyRoute() {
   const route = window.location.hash.replace(/^#\/?/, "") || "open";
   settingsProfileView.classList.add("hidden");
   settingsAppearanceView.classList.add("hidden");
+  settingsAutochatView.classList.add("hidden");
   statsView.classList.add("hidden");
 
   if (route === "settings" || route === "settings/profile") {
@@ -1339,6 +1350,10 @@ function applyRoute() {
   }
   if (route === "settings/appearance") {
     openAppearanceSettings();
+    return;
+  }
+  if (route === "settings/autochat") {
+    openAutochatSettings();
     return;
   }
   if (route === "stats") {
@@ -1385,6 +1400,14 @@ function openAppearanceSettings() {
   appearanceIconInput.value = currentAdmin.workspaceBubbleIcon || "💬";
   appearanceError.classList.add("hidden");
   settingsAppearanceView.classList.remove("hidden");
+}
+
+function openAutochatSettings() {
+  appScreen.classList.add("hidden");
+  autochatEnabledInput.checked = !!currentAdmin.autoGreetingEnabled;
+  autochatMessageInput.value = currentAdmin.autoGreetingMessage || "";
+  autochatError.classList.add("hidden");
+  settingsAutochatView.classList.remove("hidden");
 }
 
 settingsBtn.addEventListener("click", () => {
@@ -1438,6 +1461,36 @@ appearanceSaveBtn.addEventListener("click", async () => {
     appearanceError.classList.remove("hidden");
   } finally {
     appearanceSaveBtn.disabled = false;
+  }
+});
+
+autochatSaveBtn.addEventListener("click", async () => {
+  const enabled = autochatEnabledInput.checked;
+  const message = autochatMessageInput.value.trim();
+
+  if (enabled && !message) {
+    autochatError.textContent = "Isi dulu pesan sapaannya sebelum mengaktifkan.";
+    autochatError.classList.remove("hidden");
+    return;
+  }
+
+  autochatSaveBtn.disabled = true;
+  autochatError.classList.add("hidden");
+
+  try {
+    await setDoc(
+      doc(db, ...wsPath()),
+      { autoGreetingEnabled: enabled, autoGreetingMessage: message },
+      { merge: true }
+    );
+    currentAdmin.autoGreetingEnabled = enabled;
+    currentAdmin.autoGreetingMessage = message;
+    navigateTo("open");
+  } catch (err) {
+    autochatError.textContent = "Gagal menyimpan: " + err.message;
+    autochatError.classList.remove("hidden");
+  } finally {
+    autochatSaveBtn.disabled = false;
   }
 });
 
