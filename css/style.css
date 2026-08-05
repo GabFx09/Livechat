@@ -6,9 +6,19 @@
   --text: #e8eaed;
   --text-dim: #9aa0ac;
   --accent: #5b8cff;
+  --accent-2: #7c6cff;
   --accent-dim: #2f3b5c;
+  --accent-grad: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, #3f6fe0 100%);
   --online: #3ddc84;
   --offline: #565c68;
+  --danger: #e5484d;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.4);
+  --shadow-accent: 0 6px 18px rgba(91, 140, 255, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -17,9 +27,12 @@ html, body {
   height: 100%;
   height: 100dvh;
   margin: 0;
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .hidden { display: none !important; }
@@ -27,6 +40,42 @@ html, body {
 .screen {
   height: 100%;
   width: 100%;
+}
+
+/* Scrollbar & focus polish, dipakai di seluruh app */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+  background-clip: padding-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button, a, input, textarea {
+  font-family: inherit;
 }
 
 /* Login screen */
@@ -58,37 +107,49 @@ html, body {
   width: 100%;
   max-width: 880px;
   min-height: 480px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-lg);
 }
 
 .auth-brand {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 48px 44px;
-  background: linear-gradient(150deg, var(--accent) 0%, #2c3e8f 55%, #1a2350 100%);
+  background:
+    radial-gradient(circle at 85% 10%, rgba(255, 255, 255, 0.14), transparent 45%),
+    linear-gradient(150deg, var(--accent-2) 0%, var(--accent) 45%, #2c3e8f 80%, #1a2350 100%);
   color: white;
+  overflow: hidden;
 }
 
 .auth-brand-icon {
+  position: relative;
+  z-index: 1;
   width: 56px;
   height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   font-size: 1.7rem;
   margin-bottom: 20px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
 .auth-brand h1 {
+  position: relative;
+  z-index: 1;
   margin: 0 0 14px;
-  font-size: 1.7rem;
-  letter-spacing: -0.01em;
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .auth-brand p {
@@ -116,6 +177,8 @@ html, body {
 .auth-form-card h2 {
   margin: 0 0 6px;
   font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .auth-subtitle {
@@ -138,37 +201,38 @@ html, body {
 .auth-form-card input {
   width: 100%;
   padding: 11px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--panel-alt);
   color: var(--text);
   font-size: 0.95rem;
   margin-bottom: 18px;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .auth-form-card input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
 }
 
 .auth-form-card button {
   width: 100%;
-  padding: 11px 12px;
-  border-radius: 8px;
+  padding: 12px 12px;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(91, 140, 255, 0.35);
-  transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  box-shadow: var(--shadow-accent);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .auth-form-card button:hover {
-  opacity: 0.92;
-  box-shadow: 0 6px 18px rgba(91, 140, 255, 0.45);
+  box-shadow: 0 8px 22px rgba(91, 140, 255, 0.5);
+  transform: translateY(-1px);
 }
 
 .auth-form-card button:active {
@@ -314,7 +378,7 @@ html, body {
   position: relative;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-dim);
@@ -323,6 +387,11 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.rail-icon-btn:active {
+  transform: scale(0.94);
 }
 
 .rail-icon-btn-bottom {
@@ -380,6 +449,7 @@ html, body {
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   font-size: 0.95rem;
+  transition: background 0.12s ease;
 }
 
 .user-item:hover {
@@ -387,7 +457,7 @@ html, body {
 }
 
 .user-item.active {
-  background: var(--accent);
+  background: var(--accent-grad);
   box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.5);
 }
 
@@ -426,7 +496,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm), 0 0 0 2px rgba(255, 255, 255, 0.06);
 }
 
 .customer-avatar svg {
@@ -447,6 +517,20 @@ html, body {
 
 .presence-dot.online { background: var(--online); }
 .presence-dot.offline { background: var(--offline); }
+
+.presence-dot.online::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--online);
+  animation: presence-pulse 2.2s ease-out infinite;
+}
+
+@keyframes presence-pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
 
 .user-item.active .presence-dot { box-shadow: 0 0 0 2px var(--accent); }
 
@@ -552,14 +636,16 @@ html, body {
   color: var(--text-dim);
   width: 30px;
   height: 30px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
   cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .header-icon-btn:hover {
   color: var(--text);
   border-color: var(--text-dim);
+  background: var(--panel-alt);
 }
 
 /* Panel info customer (khusus admin) */
@@ -616,26 +702,28 @@ html, body {
 .archive-btn {
   margin-top: 8px;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .archive-btn:hover {
   border-color: var(--text-dim);
+  background: var(--panel-alt);
 }
 
 .archive-btn.danger {
-  border-color: #e5484d;
-  color: #e5484d;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .archive-btn.danger:hover {
-  background: rgba(229, 72, 77, 0.1);
+  background: rgba(229, 72, 77, 0.12);
 }
 
 /* Saved Replies */
@@ -682,12 +770,18 @@ html, body {
   min-width: 160px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 20px 18px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-md);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stats-summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .stats-summary-label {
@@ -721,9 +815,9 @@ html, body {
 .stats-chart-card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 24px clamp(16px, 3vw, 32px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-md);
   max-width: 900px;
 }
 
@@ -767,11 +861,12 @@ html, body {
   border-radius: 4px 4px 0 0;
   background: var(--accent);
   opacity: 0.75;
-  transition: opacity 0.1s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .stats-bar-wrap:hover .stats-bar {
   opacity: 1;
+  transform: scaleY(1.01);
 }
 
 .stats-bar-wrap.is-today .stats-bar {
@@ -861,9 +956,10 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--panel-alt);
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
 .saved-reply-item:hover {
@@ -918,12 +1014,18 @@ html, body {
 #saved-reply-form button {
   flex-shrink: 0;
   padding: 9px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-accent);
+  transition: transform 0.12s ease;
+}
+
+#saved-reply-form button:hover {
+  transform: translateY(-1px);
 }
 
 #saved-replies-close-btn {
@@ -947,6 +1049,17 @@ html, body {
   gap: 10px;
 }
 
+#messages:empty {
+  align-items: center;
+  justify-content: center;
+}
+
+#messages:empty::after {
+  content: "💬";
+  font-size: 2.4rem;
+  opacity: 0.25;
+}
+
 .date-divider {
   align-self: center;
   background: var(--panel-alt);
@@ -960,16 +1073,19 @@ html, body {
 
 .message {
   max-width: 65%;
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: 9px 13px;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
   background: var(--panel-alt);
   align-self: flex-start;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-sm);
 }
 
 .message.mine {
   background: var(--accent-dim);
   align-self: flex-end;
+  border-radius: 14px;
+  border-bottom-right-radius: 4px;
   box-shadow: 0 2px 8px rgba(91, 140, 255, 0.18);
 }
 
@@ -1156,27 +1272,35 @@ html, body {
 #message-input {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--panel-alt);
   color: var(--text);
   font-size: 1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+#message-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
 }
 
 #message-form button {
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(91, 140, 255, 0.35);
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  box-shadow: var(--shadow-accent);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 #message-form button:hover {
-  box-shadow: 0 4px 12px rgba(91, 140, 255, 0.45);
+  box-shadow: 0 8px 20px rgba(91, 140, 255, 0.45);
+  transform: translateY(-1px);
 }
 
 #message-form button:active {
@@ -1262,15 +1386,17 @@ html, body {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 1.1rem;
   color: var(--text-dim);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .attach-btn:hover {
   color: var(--text);
   border-color: var(--text-dim);
+  background: var(--panel-alt);
 }
 
 /* Settings modal */
@@ -1298,11 +1424,12 @@ html, body {
 .modal-card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   width: 100%;
   max-width: 340px;
   text-align: center;
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-card h2 {
@@ -1407,9 +1534,9 @@ html, body {
   text-align: left;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 28px clamp(20px, 3vw, 36px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-md);
   margin-bottom: 24px;
 }
 
@@ -1428,7 +1555,7 @@ html, body {
 .settings-panel textarea {
   width: 100%;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--panel-alt);
   color: var(--text);
@@ -1436,6 +1563,14 @@ html, body {
   font-family: inherit;
   margin-bottom: 14px;
   resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-panel input[type="text"]:focus,
+.settings-panel textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
 }
 
 .settings-checkbox-row {
@@ -1481,13 +1616,23 @@ html, body {
   width: 100%;
   max-width: 260px;
   padding: 11px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(91, 140, 255, 0.35);
+  box-shadow: var(--shadow-accent);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.settings-panel button:hover {
+  box-shadow: 0 8px 20px rgba(91, 140, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.settings-panel button:active {
+  transform: translateY(1px);
 }
 
 .btn-logout {
@@ -1495,12 +1640,13 @@ html, body {
   max-width: 260px;
   margin-top: 8px;
   padding: 11px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid #ff6b6b;
   background: transparent;
   color: #ff6b6b;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .btn-logout:hover {
@@ -1526,18 +1672,19 @@ html, body {
   font-size: 1.6rem;
   font-weight: 700;
   color: var(--text);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(255, 255, 255, 0.06);
 }
 
 .file-btn {
   display: inline-block;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   color: var(--text-dim);
   font-size: 0.85rem;
   cursor: pointer;
   margin-bottom: 14px;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .file-btn:hover {
@@ -1548,12 +1695,19 @@ html, body {
 .modal-card input[type="text"] {
   width: 100%;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--panel-alt);
   color: var(--text);
   font-size: 1rem;
   margin-bottom: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modal-card input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
 }
 
 .modal-actions {
@@ -1564,20 +1718,31 @@ html, body {
 .btn-secondary {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--text-dim);
+  background: var(--panel-alt);
 }
 
 #settings-save-btn {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+#settings-save-btn:hover {
+  transform: translateY(-1px);
 }

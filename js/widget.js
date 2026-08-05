@@ -93,24 +93,32 @@
   var style = document.createElement("style");
 
   function buildStyleText(color) {
+    var fontImport = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap');";
+    var fontStack = "'Inter',-apple-system,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif";
     return (
-      "#livechat-widget-bubble{position:fixed;bottom:20px;right:20px;width:58px;height:58px;" +
-      "border-radius:50%;background:" + color + ";color:#fff;border:none;font-size:26px;line-height:1;" +
-      "cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:2147483000;" +
-      "display:flex;align-items:center;justify-content:center;transition:transform .15s ease;}" +
-      "#livechat-widget-bubble:hover{transform:scale(1.06);}" +
+      fontImport +
+      "#livechat-widget-bubble{position:fixed;bottom:22px;right:22px;width:60px;height:60px;" +
+      "border-radius:50%;background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(0,0,0,.12))," + color + ";" +
+      "color:#fff;border:none;font-size:26px;line-height:1;" +
+      "cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.08) inset;z-index:2147483000;" +
+      "display:flex;align-items:center;justify-content:center;transition:transform .18s ease,box-shadow .18s ease;}" +
+      "#livechat-widget-bubble:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.1) inset;}" +
+      "#livechat-widget-bubble:active{transform:scale(0.97);}" +
       "#livechat-widget-bubble.hidden{display:none;}" +
-      "#livechat-widget-panel{position:fixed;bottom:20px;right:20px;width:370px;height:560px;" +
-      "max-height:80vh;background:#171a21;border-radius:14px;overflow:hidden;" +
-      "box-shadow:0 16px 48px rgba(0,0,0,.5);display:flex;flex-direction:column;" +
-      "z-index:2147483000;opacity:0;pointer-events:none;transform:translateY(12px);" +
-      "transition:opacity .15s ease,transform .15s ease;}" +
-      "#livechat-widget-panel.livechat-widget-open{opacity:1;pointer-events:auto;transform:translateY(0);}" +
+      "#livechat-widget-panel{position:fixed;bottom:22px;right:22px;width:374px;height:568px;" +
+      "max-height:80vh;background:#171a21;border-radius:18px;overflow:hidden;" +
+      "box-shadow:0 20px 56px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06);display:flex;flex-direction:column;" +
+      "z-index:2147483000;opacity:0;pointer-events:none;transform:translateY(16px) scale(.98);" +
+      "transition:opacity .18s ease,transform .18s ease;font-family:" + fontStack + ";}" +
+      "#livechat-widget-panel.livechat-widget-open{opacity:1;pointer-events:auto;transform:translateY(0) scale(1);}" +
       "#livechat-widget-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;" +
-      "padding:14px 16px;background:" + color + ";color:#fff;font-weight:600;" +
-      "font-family:-apple-system,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;}" +
-      "#livechat-widget-close{background:transparent;border:none;color:#fff;font-size:16px;" +
-      "cursor:pointer;line-height:1;padding:2px 4px;}" +
+      "padding:16px 18px;background:linear-gradient(135deg," + color + ",rgba(0,0,0,.15))," + color + ";" +
+      "color:#fff;font-weight:600;font-size:15px;letter-spacing:-.01em;" +
+      "font-family:" + fontStack + ";box-shadow:0 4px 12px rgba(0,0,0,.2);}" +
+      "#livechat-widget-close{background:rgba(255,255,255,.14);border:none;color:#fff;font-size:14px;" +
+      "width:26px;height:26px;border-radius:50%;cursor:pointer;line-height:1;" +
+      "display:flex;align-items:center;justify-content:center;transition:background .15s ease;}" +
+      "#livechat-widget-close:hover{background:rgba(255,255,255,.26);}" +
       "#livechat-widget-iframe{flex:1;border:none;width:100%;background:#171a21;}" +
       "#livechat-widget-panel.livechat-widget-fullscreen{top:0;left:0;right:0;bottom:0;" +
       "width:100%;height:100%;max-height:100%;border-radius:0;}" +
