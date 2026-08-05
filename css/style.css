@@ -289,6 +289,26 @@ html, body {
   border-color: var(--text-dim);
 }
 
+.sidebar-search {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+#customer-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+#customer-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .sidebar-body {
   display: flex;
   flex: 1;

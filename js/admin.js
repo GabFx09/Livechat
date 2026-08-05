@@ -34,6 +34,7 @@ let lastKnownTimestamps = new Map();
 let customersInitialLoadDone = false;
 let customersDataMap = new Map();
 let currentListView = "active"; // "active" | "archived"
+let searchQuery = "";
 let autoArchiveIntervalId = null;
 
 const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis diarsipkan
@@ -66,6 +67,7 @@ const customerPanelBody = document.getElementById("customer-panel-body");
 const tabActiveBtn = document.getElementById("tab-active-btn");
 const tabArchivedBtn = document.getElementById("tab-archived-btn");
 const railUnreadBadge = document.getElementById("rail-unread-badge");
+const customerSearchInput = document.getElementById("customer-search-input");
 
 const settingsBtn = document.getElementById("settings-btn");
 const settingsOverlay = document.getElementById("settings-overlay");
@@ -482,12 +484,18 @@ function listenCustomers() {
   });
 }
 
+function matchesSearch(name) {
+  if (!searchQuery) return true;
+  return (name || "").toLowerCase().includes(searchQuery.toLowerCase());
+}
+
 function getVisibleCustomerEntries() {
   const entries = [];
   customersDataMap.forEach((data, uid) => {
     const isArchived = !!data.archived;
     if (currentListView === "archived" && !isArchived) return;
     if (currentListView === "active" && isArchived) return;
+    if (!matchesSearch(data.name)) return;
     entries.push({ uid, name: data.name });
   });
   return entries;
@@ -533,6 +541,7 @@ function renderCustomerList() {
     const isArchived = !!data.archived;
     if (currentListView === "archived" && !isArchived) return;
     if (currentListView === "active" && isArchived) return;
+    if (!matchesSearch(data.name)) return;
 
     const unreadCount = isArchived ? 0 : data.unreadCount || 0;
     const waiting = unreadCount > 0;
@@ -940,6 +949,8 @@ logoutBtn.addEventListener("click", async () => {
   customersDataMap.clear();
   customersInitialLoadDone = false;
   currentListView = "active";
+  searchQuery = "";
+  customerSearchInput.value = "";
   tabActiveBtn.classList.add("active");
   tabArchivedBtn.classList.remove("active");
   railUnreadBadge.classList.add("hidden");
@@ -954,6 +965,11 @@ logoutBtn.addEventListener("click", async () => {
   loginBtn.disabled = false;
   sidebarAvatarEl.style.backgroundImage = "";
   sidebarAvatarEl.textContent = "";
+});
+
+customerSearchInput.addEventListener("input", () => {
+  searchQuery = customerSearchInput.value.trim();
+  renderCustomerList();
 });
 
 tabActiveBtn.addEventListener("click", () => {
