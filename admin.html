@@ -92,27 +92,30 @@
     <header class="settings-view-header">
       <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
       <span>Pengaturan</span>
+    </header>
+
+    <div class="settings-view-layout">
       <nav class="settings-sub-nav">
         <a href="#/settings/profile" class="settings-sub-nav-btn active">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
       </nav>
-    </header>
 
-    <div class="settings-view-body">
-      <div class="settings-panel">
-        <div class="avatar-preview-wrap">
-          <div id="avatar-preview" class="avatar-preview"></div>
+      <div class="settings-view-body">
+        <div class="settings-panel">
+          <div class="avatar-preview-wrap">
+            <div id="avatar-preview" class="avatar-preview"></div>
+          </div>
+          <label class="file-btn" for="photo-input">Ganti foto profil</label>
+          <input id="photo-input" type="file" accept="image/*" class="hidden" />
+          <label class="auth-label" for="display-name-input">Nama Tampilan</label>
+          <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
+          <button id="settings-save-btn" type="button">Simpan Profil</button>
+          <p id="settings-error" class="error hidden"></p>
         </div>
-        <label class="file-btn" for="photo-input">Ganti foto profil</label>
-        <input id="photo-input" type="file" accept="image/*" class="hidden" />
-        <label class="auth-label" for="display-name-input">Nama Tampilan</label>
-        <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
-        <button id="settings-save-btn" type="button">Simpan Profil</button>
-        <p id="settings-error" class="error hidden"></p>
-      </div>
 
-      <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
+        <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
+      </div>
     </div>
   </section>
 
@@ -120,27 +123,30 @@
     <header class="settings-view-header">
       <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
       <span>Pengaturan</span>
+    </header>
+
+    <div class="settings-view-layout">
       <nav class="settings-sub-nav">
         <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn active">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
       </nav>
-    </header>
 
-    <div class="settings-view-body">
-      <div class="settings-panel">
-        <p class="settings-hint">Atur tampilan widget chat yang muncul di website perusahaan Anda.</p>
-        <label class="auth-label" for="appearance-brand-input">Nama Brand</label>
-        <input id="appearance-brand-input" type="text" placeholder="mis. Toko ABC" maxlength="60" />
-        <label class="auth-label" for="appearance-color-input">Warna Tema</label>
-        <div class="color-input-row">
-          <input id="appearance-color-input" type="color" />
-          <input id="appearance-color-text" type="text" placeholder="#5b8cff" maxlength="7" />
+      <div class="settings-view-body">
+        <div class="settings-panel">
+          <p class="settings-hint">Atur tampilan widget chat yang muncul di website perusahaan Anda.</p>
+          <label class="auth-label" for="appearance-brand-input">Nama Brand</label>
+          <input id="appearance-brand-input" type="text" placeholder="mis. Toko ABC" maxlength="60" />
+          <label class="auth-label" for="appearance-color-input">Warna Tema</label>
+          <div class="color-input-row">
+            <input id="appearance-color-input" type="color" />
+            <input id="appearance-color-text" type="text" placeholder="#5b8cff" maxlength="7" />
+          </div>
+          <label class="auth-label" for="appearance-icon-input">Ikon Bubble (emoji)</label>
+          <input id="appearance-icon-input" type="text" placeholder="💬" maxlength="4" />
+          <button id="appearance-save-btn" type="button">Simpan Appearance</button>
+          <p id="appearance-error" class="error hidden"></p>
         </div>
-        <label class="auth-label" for="appearance-icon-input">Ikon Bubble (emoji)</label>
-        <input id="appearance-icon-input" type="text" placeholder="💬" maxlength="4" />
-        <button id="appearance-save-btn" type="button">Simpan Appearance</button>
-        <p id="appearance-error" class="error hidden"></p>
       </div>
     </div>
   </section>
@@ -149,24 +155,27 @@
     <header class="settings-view-header">
       <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
       <span>Pengaturan</span>
+    </header>
+
+    <div class="settings-view-layout">
       <nav class="settings-sub-nav">
         <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn active">Auto-Chat</a>
       </nav>
-    </header>
 
-    <div class="settings-view-body">
-      <div class="settings-panel">
-        <p class="settings-hint">Kirim sapaan otomatis begitu customer baru pertama kali membuka chat, sebelum mereka mengetik apa pun. Tidak dikirim ulang untuk customer lama yang sudah pernah chat.</p>
-        <label class="settings-checkbox-row" for="autochat-enabled-input">
-          <input id="autochat-enabled-input" type="checkbox" />
-          <span>Aktifkan sapaan otomatis</span>
-        </label>
-        <label class="auth-label" for="autochat-message-input">Pesan Sapaan</label>
-        <textarea id="autochat-message-input" rows="4" maxlength="500" placeholder="mis. Halo! Selamat datang di Toko ABC, ada yang bisa kami bantu?"></textarea>
-        <button id="autochat-save-btn" type="button">Simpan Auto-Chat</button>
-        <p id="autochat-error" class="error hidden"></p>
+      <div class="settings-view-body">
+        <div class="settings-panel">
+          <p class="settings-hint">Kirim sapaan otomatis begitu customer baru pertama kali membuka chat, sebelum mereka mengetik apa pun. Tidak dikirim ulang untuk customer lama yang sudah pernah chat.</p>
+          <label class="settings-checkbox-row" for="autochat-enabled-input">
+            <input id="autochat-enabled-input" type="checkbox" />
+            <span>Aktifkan sapaan otomatis</span>
+          </label>
+          <label class="auth-label" for="autochat-message-input">Pesan Sapaan</label>
+          <textarea id="autochat-message-input" rows="4" maxlength="500" placeholder="mis. Halo! Selamat datang di Toko ABC, ada yang bisa kami bantu?"></textarea>
+          <button id="autochat-save-btn" type="button">Simpan Auto-Chat</button>
+          <p id="autochat-error" class="error hidden"></p>
+        </div>
       </div>
     </div>
   </section>
