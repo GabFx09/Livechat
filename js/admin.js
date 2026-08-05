@@ -34,7 +34,7 @@ let unsubMessages = null;
 let lastKnownTimestamps = new Map();
 let customersInitialLoadDone = false;
 let customersDataMap = new Map();
-let currentListView = "active"; // "active" | "archived"
+let currentListView = "active"; // "active" (Open) | "all" | "archived"
 let searchQuery = "";
 let autoArchiveIntervalId = null;
 
@@ -66,6 +66,7 @@ const infoCloseBtn = document.getElementById("info-close-btn");
 const customerPanel = document.getElementById("customer-panel");
 const customerPanelBody = document.getElementById("customer-panel-body");
 const tabActiveBtn = document.getElementById("tab-active-btn");
+const tabAllBtn = document.getElementById("tab-all-btn");
 const tabArchivedBtn = document.getElementById("tab-archived-btn");
 const railUnreadBadge = document.getElementById("rail-unread-badge");
 const customerSearchInput = document.getElementById("customer-search-input");
@@ -549,7 +550,7 @@ function renderCustomerList() {
     if (currentListView === "active" && isArchived) return;
     if (!matchesSearch(data)) return;
 
-    const unreadCount = isArchived ? 0 : data.unreadCount || 0;
+    const unreadCount = data.unreadCount || 0;
     const waiting = unreadCount > 0;
 
     const li = document.createElement("li");
@@ -958,6 +959,7 @@ logoutBtn.addEventListener("click", async () => {
   searchQuery = "";
   customerSearchInput.value = "";
   tabActiveBtn.classList.add("active");
+  tabAllBtn.classList.remove("active");
   tabArchivedBtn.classList.remove("active");
   railUnreadBadge.classList.add("hidden");
   settingsOverlay.classList.add("hidden");
@@ -978,19 +980,17 @@ customerSearchInput.addEventListener("input", () => {
   renderCustomerList();
 });
 
-tabActiveBtn.addEventListener("click", () => {
-  currentListView = "active";
-  tabActiveBtn.classList.add("active");
-  tabArchivedBtn.classList.remove("active");
+function setListView(view) {
+  currentListView = view;
+  tabActiveBtn.classList.toggle("active", view === "active");
+  tabAllBtn.classList.toggle("active", view === "all");
+  tabArchivedBtn.classList.toggle("active", view === "archived");
   renderCustomerList();
-});
+}
 
-tabArchivedBtn.addEventListener("click", () => {
-  currentListView = "archived";
-  tabArchivedBtn.classList.add("active");
-  tabActiveBtn.classList.remove("active");
-  renderCustomerList();
-});
+tabActiveBtn.addEventListener("click", () => setListView("active"));
+tabAllBtn.addEventListener("click", () => setListView("all"));
+tabArchivedBtn.addEventListener("click", () => setListView("archived"));
 
 infoToggleBtn.addEventListener("click", () => {
   customerPanel.classList.toggle("hidden");
