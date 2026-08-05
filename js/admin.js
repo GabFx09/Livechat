@@ -696,6 +696,45 @@ function updateTypingPreview() {
   typingPreviewEl.classList.remove("hidden");
 }
 
+// --- Notifikasi di tab browser (judul + favicon bertitik merah) ---
+
+const faviconLink = document.querySelector('link[rel="icon"]');
+
+function buildFaviconDataUrl(hasBadge) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext("2d");
+
+  ctx.save();
+  ctx.scale(32 / 24, 32 / 24);
+  const bubble = new Path2D("M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z");
+  ctx.fillStyle = "#D4AF37";
+  ctx.fill(bubble);
+  ctx.restore();
+
+  if (hasBadge) {
+    ctx.beginPath();
+    ctx.arc(25, 8, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff3b3b";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#0f1115";
+    ctx.stroke();
+  }
+
+  return canvas.toDataURL("image/png");
+}
+
+function getBaseTitle() {
+  return (currentAdmin && currentAdmin.workspaceName ? currentAdmin.workspaceName : "LiveChat") + " - Admin";
+}
+
+function updateTabNotification(count) {
+  document.title = count > 0 ? "(" + (count > 99 ? "99+" : count) + ") " + getBaseTitle() : getBaseTitle();
+  if (faviconLink) faviconLink.href = buildFaviconDataUrl(count > 0);
+}
+
 function updateRailBadge() {
   let total = 0;
   customersDataMap.forEach((data) => {
@@ -709,6 +748,8 @@ function updateRailBadge() {
   } else {
     railUnreadBadge.classList.add("hidden");
   }
+
+  updateTabNotification(total);
 }
 
 function renderCustomerList() {
@@ -1125,6 +1166,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   window.location.hash = "";
   await signOut(auth);
   currentAdmin = null;
+  updateTabNotification(0);
   activeCustomerUid = null;
   activeCustomerName = "";
   lastKnownTimestamps.clear();
