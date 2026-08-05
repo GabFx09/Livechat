@@ -9,6 +9,7 @@ import {
   getFirestore,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -18,7 +19,10 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
-  arrayUnion
+  arrayUnion,
+  increment,
+  where,
+  documentId
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
@@ -42,6 +46,35 @@ const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis
 
 function wsPath(...segments) {
   return ["workspaces", currentAdmin.workspaceId, ...segments];
+}
+
+// Kunci tanggal (YYYY-MM-DD) berdasarkan WIB, dipakai untuk mengelompokkan
+// counter statistik harian di dashboard admin.
+function todayKeyWIB() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function dateKeyDaysAgoWIB(daysAgo) {
+  const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function bumpStat(field) {
+  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(1) }, { merge: true }).catch(() => {});
 }
 
 const loadingScreen = document.getElementById("loading-screen");
@@ -98,6 +131,17 @@ const savedReplyForm = document.getElementById("saved-reply-form");
 const savedReplyInput = document.getElementById("saved-reply-input");
 const savedRepliesCloseBtn = document.getElementById("saved-replies-close-btn");
 const replySuggestionsEl = document.getElementById("reply-suggestions");
+
+const statsBtn = document.getElementById("stats-btn");
+const statsOverlay = document.getElementById("stats-overlay");
+const statsCloseBtn = document.getElementById("stats-close-btn");
+const statsTodayCount = document.getElementById("stats-today-count");
+const statsYesterdayCount = document.getElementById("stats-yesterday-count");
+const statsTodayNewCustomers = document.getElementById("stats-today-new-customers");
+const statsDeltaEl = document.getElementById("stats-delta");
+const statsChartEl = document.getElementById("stats-chart");
+const statsChartTotal = document.getElementById("stats-chart-total");
+const statsAxisStart = document.getElementById("stats-axis-start");
 
 let unsubSavedReplies = null;
 let savedRepliesCache = [];
@@ -184,6 +228,9 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !savedRepliesOverlay.classList.contains("hidden")) {
     savedRepliesOverlay.classList.add("hidden");
+  }
+  if (e.key === "Escape" && !statsOverlay.classList.contains("hidden")) {
+    statsOverlay.classList.add("hidden");
   }
 });
 
@@ -347,6 +394,98 @@ function openSavedReplies() {
   savedRepliesOverlay.classList.remove("hidden");
   savedReplyInput.focus();
 }
+
+// --- Dashboard Statistik ---
+
+function formatShortDateWIB(dateKey) {
+  // dateKey = "YYYY-MM-DD" -> "5 Agu"
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+async function openStats() {
+  statsOverlay.classList.remove("hidden");
+  statsChartEl.innerHTML = "";
+  statsTodayCount.textContent = "…";
+  statsYesterdayCount.textContent = "…";
+  statsTodayNewCustomers.textContent = "…";
+  statsDeltaEl.textContent = "";
+
+  const DAYS = 30;
+  const startKey = dateKeyDaysAgoWIB(DAYS - 1);
+  const todayKey = todayKeyWIB();
+
+  // Kunci tanggal format YYYY-MM-DD urut leksikografis sama dengan urut
+  // kronologis, jadi range query pakai documentId() bisa dipakai langsung
+  // tanpa perlu 30x getDoc terpisah.
+  const byDate = new Map();
+  try {
+    const q = query(
+      collection(db, ...wsPath("stats")),
+      where(documentId(), ">=", startKey),
+      where(documentId(), "<=", todayKey)
+    );
+    const snap = await getDocs(q);
+    snap.forEach((docSnap) => byDate.set(docSnap.id, docSnap.data()));
+  } catch (err) {
+    console.error("Gagal memuat statistik:", err);
+  }
+
+  const days = [];
+  for (let i = DAYS - 1; i >= 0; i--) {
+    const key = dateKeyDaysAgoWIB(i);
+    const data = byDate.get(key) || {};
+    days.push({ key, messageCount: data.messageCount || 0, newCustomers: data.newCustomers || 0 });
+  }
+
+  const today = days[days.length - 1];
+  const yesterday = days[days.length - 2] || { messageCount: 0 };
+
+  statsTodayCount.textContent = String(today.messageCount);
+  statsYesterdayCount.textContent = String(yesterday.messageCount);
+  statsTodayNewCustomers.textContent = String(today.newCustomers);
+
+  const diff = today.messageCount - yesterday.messageCount;
+  if (diff > 0) {
+    statsDeltaEl.textContent = "▲ " + diff + " dari kemarin";
+    statsDeltaEl.className = "stats-delta up";
+  } else if (diff < 0) {
+    statsDeltaEl.textContent = "▼ " + Math.abs(diff) + " dari kemarin";
+    statsDeltaEl.className = "stats-delta down";
+  } else {
+    statsDeltaEl.textContent = "Sama seperti kemarin";
+    statsDeltaEl.className = "stats-delta flat";
+  }
+
+  const total = days.reduce((sum, d) => sum + d.messageCount, 0);
+  statsChartTotal.textContent = "(" + total + " pesan)";
+  statsAxisStart.textContent = formatShortDateWIB(days[0].key);
+
+  const maxCount = Math.max(1, ...days.map((d) => d.messageCount));
+  statsChartEl.innerHTML = "";
+  days.forEach((d, i) => {
+    const wrap = document.createElement("div");
+    wrap.className = "stats-bar-wrap" + (i === days.length - 1 ? " is-today" : "");
+
+    const bar = document.createElement("div");
+    bar.className = "stats-bar";
+    bar.style.height = Math.max(2, Math.round((d.messageCount / maxCount) * 100)) + "%";
+
+    const tooltip = document.createElement("div");
+    tooltip.className = "stats-bar-tooltip";
+    tooltip.textContent = formatShortDateWIB(d.key) + ": " + d.messageCount + " pesan";
+
+    wrap.appendChild(tooltip);
+    wrap.appendChild(bar);
+    statsChartEl.appendChild(wrap);
+  });
+}
+
+statsBtn.addEventListener("click", openStats);
+statsCloseBtn.addEventListener("click", () => {
+  statsOverlay.classList.add("hidden");
+});
 
 // --- Saran otomatis saved replies saat mengetik di kolom pesan ---
 
@@ -884,6 +1023,8 @@ messageForm.addEventListener("submit", async (e) => {
       timestamp: serverTimestamp()
     });
     await touchCustomerDoc(text, text);
+    bumpStat("messageCount");
+    bumpStat("adminMessageCount");
   } catch (err) {
     alert("Gagal mengirim balasan: " + err.message);
   }
@@ -906,6 +1047,8 @@ imageInput.addEventListener("change", async () => {
       timestamp: serverTimestamp()
     });
     await touchCustomerDoc("📷 Gambar");
+    bumpStat("messageCount");
+    bumpStat("adminMessageCount");
   } catch (err) {
     alert(err.message || "Gagal mengirim gambar.");
   }
@@ -979,6 +1122,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   railUnreadBadge.classList.add("hidden");
   settingsOverlay.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
+  statsOverlay.classList.add("hidden");
   customerPanel.classList.add("hidden");
   infoToggleBtn.classList.add("hidden");
   appScreen.classList.add("hidden");

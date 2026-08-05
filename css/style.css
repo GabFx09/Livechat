@@ -598,6 +598,152 @@ html, body {
   text-align: left;
 }
 
+/* Dashboard Statistik */
+.stats-card {
+  max-width: 460px;
+  text-align: left;
+}
+
+.stats-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.stats-header-row h2 {
+  margin: 0;
+}
+
+.stats-summary-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.stats-summary-card {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-alt);
+  border-radius: 10px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stats-summary-label {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stats-summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.stats-summary-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.stats-delta {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.stats-delta.up { color: var(--online); }
+.stats-delta.down { color: #ff6b6b; }
+.stats-delta.flat { color: var(--text-dim); }
+
+.stats-chart-title {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stats-chart-total {
+  font-weight: 400;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.stats-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 110px;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-bar-wrap {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  position: relative;
+}
+
+.stats-bar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  opacity: 0.75;
+  transition: opacity 0.1s ease;
+}
+
+.stats-bar-wrap:hover .stats-bar {
+  opacity: 1;
+}
+
+.stats-bar-wrap.is-today .stats-bar {
+  background: #ffb020;
+  opacity: 1;
+}
+
+.stats-bar-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.stats-bar-wrap:hover .stats-bar-tooltip {
+  opacity: 1;
+}
+
+.stats-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
 .saved-replies-card h2 {
   text-align: center;
 }

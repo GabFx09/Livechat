@@ -81,6 +81,26 @@ service cloud.firestore {
           resource.data.sender == 'admin' &&
           resource.data.senderId == request.auth.uid;
       }
+
+      // stats/{YYYY-MM-DD} = counter harian untuk dashboard statistik admin.
+      // Customer & admin sama-sama boleh menambah counter (efek samping wajar
+      // dari kirim pesan/mulai chat), tapi cuma admin yang boleh membacanya,
+      // dan field yang boleh disentuh dibatasi ke 4 counter yang dikenal.
+      match /stats/{date} {
+        allow read: if isWorkspaceAdmin();
+
+        allow create: if request.auth != null &&
+          request.resource.data.keys().hasOnly(
+            ['messageCount', 'customerMessageCount', 'adminMessageCount', 'newCustomers']
+          );
+
+        allow update: if request.auth != null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['messageCount', 'customerMessageCount', 'adminMessageCount', 'newCustomers']
+          );
+
+        allow delete: if false;
+      }
     }
   }
 }

@@ -61,6 +61,23 @@ function wsPath(...segments) {
   return ["workspaces", workspaceId, ...segments];
 }
 
+// Kunci tanggal (YYYY-MM-DD) berdasarkan WIB, dipakai untuk mengelompokkan
+// counter statistik harian di dashboard admin.
+function todayKeyWIB() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function bumpStat(field) {
+  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(1) }, { merge: true }).catch(() => {});
+}
+
 // Satu-satunya titik yang boleh memicu signInAnonymously, supaya init() (yang
 // jalan otomatis saat halaman dibuka) dan tombol "Mulai Chat" (diklik user)
 // tidak pernah balapan membuat dua sesi anonim berbeda di saat bersamaan.
@@ -328,7 +345,11 @@ messageForm.addEventListener("submit", async (e) => {
   } catch (err) {
     console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
     alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
+    return;
   }
+
+  bumpStat("messageCount");
+  bumpStat("customerMessageCount");
 });
 
 imageInput.addEventListener("change", async () => {
@@ -345,6 +366,8 @@ imageInput.addEventListener("change", async () => {
       timestamp: serverTimestamp()
     });
     await touchCustomerDoc("📷 Gambar");
+    bumpStat("messageCount");
+    bumpStat("customerMessageCount");
   } catch (err) {
     alert(err.message || "Gagal mengirim gambar.");
   }
@@ -362,6 +385,9 @@ startBtn.addEventListener("click", async () => {
 
   try {
     const user = await ensureSignedIn();
+    const existingSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
+    const isNewCustomer = !existingSnap.exists();
+
     await setDoc(
       doc(db, ...wsPath("customers", user.uid)),
       {
@@ -372,6 +398,7 @@ startBtn.addEventListener("click", async () => {
       },
       { merge: true }
     );
+    if (isNewCustomer) bumpStat("newCustomers");
     enterChat(user.uid, name);
     captureVisitorInfo(user.uid);
   } catch (err) {
