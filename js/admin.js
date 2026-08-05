@@ -41,8 +41,18 @@ let customersDataMap = new Map();
 let currentListView = "active"; // "active" (Open) | "all" | "archived"
 let searchQuery = "";
 let autoArchiveIntervalId = null;
+let presenceIntervalId = null;
 
 const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis diarsipkan
+
+// Customer dianggap online kalau lastActiveAt (heartbeat dari widget/customer.js
+// tiap 20 detik selagi tab-nya aktif) masih dalam 45 detik terakhir.
+const PRESENCE_ONLINE_MS = 45 * 1000;
+
+function isCustomerOnline(data) {
+  if (!data || !data.lastActiveAt) return false;
+  return Date.now() - data.lastActiveAt.toMillis() < PRESENCE_ONLINE_MS;
+}
 
 function wsPath(...segments) {
   return ["workspaces", currentAdmin.workspaceId, ...segments];
@@ -93,6 +103,7 @@ const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
 const chatHeaderText = document.getElementById("chat-header-text");
+const chatHeaderStatus = document.getElementById("chat-header-status");
 const infoToggleBtn = document.getElementById("info-toggle-btn");
 const infoCloseBtn = document.getElementById("info-close-btn");
 const customerPanel = document.getElementById("customer-panel");
@@ -215,6 +226,18 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
   const next = entries[index];
   openCustomer(next.uid, next.name);
+});
+
+// Alt + Enter mengarsipkan/memulihkan percakapan yang sedang dibuka.
+document.addEventListener("keydown", (e) => {
+  if (!currentAdmin) return;
+  if (!e.altKey || e.key !== "Enter") return;
+  if (isSettingsOpen()) return;
+  if (!activeCustomerUid || !customersDataMap.has(activeCustomerUid)) return;
+
+  e.preventDefault();
+  const data = customersDataMap.get(activeCustomerUid);
+  toggleArchive(activeCustomerUid, !data.archived);
 });
 
 // Ctrl+/ (atau Cmd+/ di Mac) kapan saja membuka panel Saved Replies.
@@ -345,6 +368,14 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
 
   if (autoArchiveIntervalId) clearInterval(autoArchiveIntervalId);
   autoArchiveIntervalId = setInterval(checkAutoArchive, 60000);
+
+  // Status online/offline butuh dicek ulang berkala juga (bukan cuma pas ada
+  // snapshot baru), karena berlalunya waktu sendiri tidak memicu snapshot.
+  if (presenceIntervalId) clearInterval(presenceIntervalId);
+  presenceIntervalId = setInterval(() => {
+    renderCustomerList();
+    updateChatHeaderPresence();
+  }, 15000);
 
   applyRoute();
 }
@@ -653,6 +684,7 @@ function listenCustomers() {
     if (activeCustomerUid && customersDataMap.has(activeCustomerUid)) {
       renderCustomerPanel(customersDataMap.get(activeCustomerUid), activeCustomerUid);
     }
+    updateChatHeaderPresence();
   });
 }
 
@@ -676,6 +708,19 @@ function getVisibleCustomerEntries() {
     entries.push({ uid, name: data.name });
   });
   return entries;
+}
+
+function updateChatHeaderPresence() {
+  if (!chatHeaderStatus) return;
+  const data = activeCustomerUid ? customersDataMap.get(activeCustomerUid) : null;
+  if (!data) {
+    chatHeaderStatus.textContent = "";
+    chatHeaderStatus.className = "chat-header-status hidden";
+    return;
+  }
+  const online = isCustomerOnline(data);
+  chatHeaderStatus.textContent = online ? "Online" : "Offline";
+  chatHeaderStatus.className = "chat-header-status " + (online ? "online" : "offline");
 }
 
 function updateTypingPreview() {
@@ -774,6 +819,11 @@ function renderCustomerList() {
     avatar.className = "customer-avatar";
     avatar.style.backgroundColor = colorForId(uid);
     avatar.appendChild(createPersonIcon());
+
+    const presenceDot = document.createElement("span");
+    presenceDot.className = "presence-dot " + (isCustomerOnline(data) ? "online" : "offline");
+    avatar.appendChild(presenceDot);
+
     li.appendChild(avatar);
 
     const info = document.createElement("div");
@@ -1009,6 +1059,7 @@ function openCustomer(uid, name) {
   activeCustomerUid = uid;
   activeCustomerName = name;
   chatHeaderText.textContent = "Chat dengan " + name;
+  updateChatHeaderPresence();
   infoToggleBtn.classList.remove("hidden");
   customerPanel.classList.remove("hidden");
   messageForm.classList.remove("hidden");
@@ -1162,6 +1213,10 @@ settingsLogoutBtn.addEventListener("click", async () => {
   if (autoArchiveIntervalId) {
     clearInterval(autoArchiveIntervalId);
     autoArchiveIntervalId = null;
+  }
+  if (presenceIntervalId) {
+    clearInterval(presenceIntervalId);
+    presenceIntervalId = null;
   }
   window.location.hash = "";
   await signOut(auth);

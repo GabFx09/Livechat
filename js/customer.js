@@ -253,6 +253,26 @@ function enterChat(uid, name) {
   chatScreen.classList.remove("hidden");
   updateChatHeader();
   listenMessages();
+  startPresenceHeartbeat();
+}
+
+// Kirim lastActiveAt tiap 20 detik selagi tab chat ini sedang aktif/terlihat,
+// dipakai admin utk menandai customer online/offline di admin.js (lihat
+// isCustomerOnline). Tidak dikirim saat tab di-background supaya statusnya
+// jujur mencerminkan customer masih benar-benar di halaman chat.
+const PRESENCE_HEARTBEAT_MS = 20000;
+function sendHeartbeat() {
+  if (!currentUser || document.visibilityState !== "visible") return;
+  setDoc(
+    doc(db, ...wsPath("customers", currentUser.uid)),
+    { lastActiveAt: serverTimestamp() },
+    { merge: true }
+  ).catch(() => {});
+}
+function startPresenceHeartbeat() {
+  sendHeartbeat();
+  setInterval(sendHeartbeat, PRESENCE_HEARTBEAT_MS);
+  document.addEventListener("visibilitychange", sendHeartbeat);
 }
 
 function listenMessages() {
