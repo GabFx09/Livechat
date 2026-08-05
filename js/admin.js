@@ -64,6 +64,7 @@ const customerPanel = document.getElementById("customer-panel");
 const customerPanelBody = document.getElementById("customer-panel-body");
 const tabActiveBtn = document.getElementById("tab-active-btn");
 const tabArchivedBtn = document.getElementById("tab-archived-btn");
+const railUnreadBadge = document.getElementById("rail-unread-badge");
 
 const settingsBtn = document.getElementById("settings-btn");
 const settingsOverlay = document.getElementById("settings-overlay");
@@ -470,6 +471,7 @@ function listenCustomers() {
     customersInitialLoadDone = true;
 
     renderCustomerList();
+    updateRailBadge();
     checkAutoArchive();
 
     if (activeCustomerUid && customersDataMap.has(activeCustomerUid)) {
@@ -487,6 +489,21 @@ function getVisibleCustomerEntries() {
     entries.push({ uid, name: data.name });
   });
   return entries;
+}
+
+function updateRailBadge() {
+  let total = 0;
+  customersDataMap.forEach((data) => {
+    if (data.archived) return;
+    total += data.unreadCount || 0;
+  });
+
+  if (total > 0) {
+    railUnreadBadge.textContent = total > 99 ? "99+" : String(total);
+    railUnreadBadge.classList.remove("hidden");
+  } else {
+    railUnreadBadge.classList.add("hidden");
+  }
 }
 
 function renderCustomerList() {
@@ -880,6 +897,7 @@ logoutBtn.addEventListener("click", async () => {
   currentListView = "active";
   tabActiveBtn.classList.add("active");
   tabArchivedBtn.classList.remove("active");
+  railUnreadBadge.classList.add("hidden");
   settingsOverlay.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
   customerPanel.classList.add("hidden");
