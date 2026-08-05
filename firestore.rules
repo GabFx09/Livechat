@@ -54,7 +54,9 @@ service cloud.firestore {
         allow update: if request.auth != null && request.auth.uid == customerId;
         allow update: if isWorkspaceAdmin();
 
-        allow delete: if false;
+        // Admin boleh hapus dokumen customer, dipakai fitur "Hapus Semua Chat"
+        // (menghapus profil + sesi customer sekaligus, bukan customer sendiri).
+        allow delete: if isWorkspaceAdmin();
       }
 
       // chats/{customerId}/messages = isi percakapan customer tsb dengan admin workspace ini.
@@ -77,9 +79,11 @@ service cloud.firestore {
           resource.data.senderId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt']);
 
-        allow delete: if isWorkspaceAdmin() &&
-          resource.data.sender == 'admin' &&
-          resource.data.senderId == request.auth.uid;
+        // Hapus per-pesan dari UI dibatasi ke pesan admin sendiri (lihat
+        // isOwnMessage di admin.js, tombol hapus cuma muncul di situ), tapi
+        // fitur "Hapus Semua Chat" perlu menghapus pesan customer juga --
+        // jadi izin di sini dibuka untuk admin workspace ybs secara umum.
+        allow delete: if isWorkspaceAdmin();
       }
 
       // stats/{YYYY-MM-DD} = counter harian untuk dashboard statistik admin.

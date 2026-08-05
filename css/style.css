@@ -629,6 +629,15 @@ html, body {
   border-color: var(--text-dim);
 }
 
+.archive-btn.danger {
+  border-color: #e5484d;
+  color: #e5484d;
+}
+
+.archive-btn.danger:hover {
+  background: rgba(229, 72, 77, 0.1);
+}
+
 /* Saved Replies */
 .saved-replies-card {
   max-width: 420px;

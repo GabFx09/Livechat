@@ -13,6 +13,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   collection,
   query,
   orderBy,
@@ -888,6 +889,55 @@ function renderCustomerPanel(data, uid) {
   archiveBtn.textContent = data.archived ? "Pulihkan dari Arsip" : "Arsipkan Percakapan";
   archiveBtn.addEventListener("click", () => toggleArchive(uid, !data.archived));
   customerPanelBody.appendChild(archiveBtn);
+
+  const deleteAllBtn = document.createElement("button");
+  deleteAllBtn.type = "button";
+  deleteAllBtn.className = "archive-btn danger";
+  deleteAllBtn.textContent = "Hapus Semua Chat";
+  deleteAllBtn.addEventListener("click", () => deleteAllChat(uid, data.name));
+  customerPanelBody.appendChild(deleteAllBtn);
+}
+
+// Hapus seluruh riwayat chat + dokumen profil customer. Dokumen customer ikut
+// terhapus (bukan cuma pesannya) supaya customer.js tidak nemu sesi lama pas
+// auto-rejoin (lihat init() di customer.js) dan dipaksa isi nama lagi -> sesi
+// baru dari nol, sesuai permintaan.
+async function deleteAllChat(uid, name) {
+  if (
+    !confirm(
+      `Hapus SEMUA chat dengan "${name}"? Customer akan kehilangan sesinya dan harus mulai chat baru. Tindakan ini tidak bisa dibatalkan.`
+    )
+  )
+    return;
+
+  try {
+    const msgsSnap = await getDocs(collection(db, ...wsPath("chats", uid, "messages")));
+    const refs = msgsSnap.docs.map((d) => d.ref);
+    refs.push(doc(db, ...wsPath("customers", uid)));
+
+    const CHUNK_SIZE = 450; // batas writeBatch Firestore adalah 500 operasi
+    for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+      const batch = writeBatch(db);
+      refs.slice(i, i + CHUNK_SIZE).forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
+
+    if (uid === activeCustomerUid) {
+      if (unsubMessages) unsubMessages();
+      unsubMessages = null;
+      activeCustomerUid = null;
+      activeCustomerName = "";
+      chatHeaderText.textContent = "Pilih customer di sebelah kiri";
+      updateChatHeaderPresence();
+      infoToggleBtn.classList.add("hidden");
+      customerPanel.classList.add("hidden");
+      messageForm.classList.add("hidden");
+      messagesEl.innerHTML = "";
+      typingPreviewEl.classList.add("hidden");
+    }
+  } catch (err) {
+    alert("Gagal menghapus chat: " + err.message);
+  }
 }
 
 function formatTimeWIB(timestamp) {
