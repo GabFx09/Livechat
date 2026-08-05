@@ -53,7 +53,6 @@ const loginBtn = document.getElementById("login-btn");
 const loginError = document.getElementById("login-error");
 const adminEmailEl = document.getElementById("admin-email");
 const sidebarAvatarEl = document.getElementById("sidebar-avatar");
-const logoutBtn = document.getElementById("logout-btn");
 const customerListEl = document.getElementById("customer-list");
 const messagesEl = document.getElementById("messages");
 const typingPreviewEl = document.getElementById("typing-preview");
@@ -79,6 +78,18 @@ const displayNameInput = document.getElementById("display-name-input");
 const settingsSaveBtn = document.getElementById("settings-save-btn");
 const settingsCancelBtn = document.getElementById("settings-cancel-btn");
 const settingsError = document.getElementById("settings-error");
+const settingsLogoutBtn = document.getElementById("settings-logout-btn");
+
+const settingsTabProfileBtn = document.getElementById("settings-tab-profile-btn");
+const settingsTabAppearanceBtn = document.getElementById("settings-tab-appearance-btn");
+const settingsPanelProfile = document.getElementById("settings-panel-profile");
+const settingsPanelAppearance = document.getElementById("settings-panel-appearance");
+const appearanceBrandInput = document.getElementById("appearance-brand-input");
+const appearanceColorInput = document.getElementById("appearance-color-input");
+const appearanceColorText = document.getElementById("appearance-color-text");
+const appearanceIconInput = document.getElementById("appearance-icon-input");
+const appearanceSaveBtn = document.getElementById("appearance-save-btn");
+const appearanceError = document.getElementById("appearance-error");
 
 const savedRepliesBtn = document.getElementById("saved-replies-btn");
 const savedRepliesOverlay = document.getElementById("saved-replies-overlay");
@@ -263,7 +274,11 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   try {
     const wsSnap = await getDoc(doc(db, ...wsPath()));
     if (wsSnap.exists()) {
-      currentAdmin.workspaceName = wsSnap.data().name || null;
+      const wsData = wsSnap.data();
+      currentAdmin.workspaceName = wsData.name || null;
+      currentAdmin.workspaceBrandName = wsData.brandName || wsData.name || "";
+      currentAdmin.workspaceThemeColor = wsData.themeColor || "#5b8cff";
+      currentAdmin.workspaceBubbleIcon = wsData.bubbleIcon || "💬";
       if (currentAdmin.workspaceName) document.title = currentAdmin.workspaceName + " - Admin";
     }
   } catch (err) {
@@ -941,7 +956,7 @@ passwordInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loginBtn.click();
 });
 
-logoutBtn.addEventListener("click", async () => {
+settingsLogoutBtn.addEventListener("click", async () => {
   if (unsubMessages) unsubMessages();
   if (unsubSavedReplies) unsubSavedReplies();
   if (autoArchiveIntervalId) {
@@ -1002,16 +1017,80 @@ infoCloseBtn.addEventListener("click", () => {
 
 // --- Pengaturan (nama tampilan & foto profil admin) ---
 
+function showSettingsTab(tab) {
+  settingsTabProfileBtn.classList.toggle("active", tab === "profile");
+  settingsTabAppearanceBtn.classList.toggle("active", tab === "appearance");
+  settingsPanelProfile.classList.toggle("hidden", tab !== "profile");
+  settingsPanelAppearance.classList.toggle("hidden", tab !== "appearance");
+}
+
 settingsBtn.addEventListener("click", () => {
   pendingPhotoDataUrl = null;
   displayNameInput.value = currentAdmin.name !== currentAdmin.email ? currentAdmin.name : "";
   renderAvatar(avatarPreview, currentAdmin.photo, currentAdmin.name);
   settingsError.classList.add("hidden");
+
+  appearanceBrandInput.value = currentAdmin.workspaceBrandName || "";
+  appearanceColorInput.value = currentAdmin.workspaceThemeColor || "#5b8cff";
+  appearanceColorText.value = currentAdmin.workspaceThemeColor || "#5b8cff";
+  appearanceIconInput.value = currentAdmin.workspaceBubbleIcon || "💬";
+  appearanceError.classList.add("hidden");
+
+  showSettingsTab("profile");
   settingsOverlay.classList.remove("hidden");
 });
 
+settingsTabProfileBtn.addEventListener("click", () => showSettingsTab("profile"));
+settingsTabAppearanceBtn.addEventListener("click", () => showSettingsTab("appearance"));
+
 settingsCancelBtn.addEventListener("click", () => {
   settingsOverlay.classList.add("hidden");
+});
+
+appearanceColorInput.addEventListener("input", () => {
+  appearanceColorText.value = appearanceColorInput.value;
+});
+
+appearanceColorText.addEventListener("input", () => {
+  if (/^#[0-9a-fA-F]{6}$/.test(appearanceColorText.value)) {
+    appearanceColorInput.value = appearanceColorText.value;
+  }
+});
+
+appearanceSaveBtn.addEventListener("click", async () => {
+  const brandName = appearanceBrandInput.value.trim();
+  const themeColor = appearanceColorText.value.trim();
+  const bubbleIcon = appearanceIconInput.value.trim();
+
+  if (!/^#[0-9a-fA-F]{6}$/.test(themeColor)) {
+    appearanceError.textContent = "Warna tema harus format hex, mis. #5b8cff.";
+    appearanceError.classList.remove("hidden");
+    return;
+  }
+
+  appearanceSaveBtn.disabled = true;
+  appearanceError.classList.add("hidden");
+
+  try {
+    await setDoc(
+      doc(db, ...wsPath()),
+      {
+        brandName: brandName || currentAdmin.workspaceName || "",
+        themeColor,
+        bubbleIcon: bubbleIcon || "💬"
+      },
+      { merge: true }
+    );
+    currentAdmin.workspaceBrandName = brandName;
+    currentAdmin.workspaceThemeColor = themeColor;
+    currentAdmin.workspaceBubbleIcon = bubbleIcon || "💬";
+    settingsOverlay.classList.add("hidden");
+  } catch (err) {
+    appearanceError.textContent = "Gagal menyimpan: " + err.message;
+    appearanceError.classList.remove("hidden");
+  } finally {
+    appearanceSaveBtn.disabled = false;
+  }
 });
 
 photoInput.addEventListener("change", async () => {

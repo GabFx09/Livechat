@@ -87,6 +87,11 @@ function applyBrandName(name) {
   });
 }
 
+function applyThemeColor(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  document.documentElement.style.setProperty("--accent", hex);
+}
+
 // Ambil IP & perkiraan lokasi dari layanan lookup publik (tanpa perlu izin
 // browser, beda dengan navigator.geolocation). Dipakai admin saja untuk
 // konteks tambahan. Coba ipapi.co dulu, kalau gagal/diblokir (mis. oleh
@@ -389,8 +394,10 @@ async function init() {
   try {
     const user = await ensureSignedIn();
     const wsSnap = await getDoc(doc(db, ...wsPath()));
-    if (wsSnap.exists() && wsSnap.data().brandName) {
-      applyBrandName(wsSnap.data().brandName);
+    if (wsSnap.exists()) {
+      const wsData = wsSnap.data();
+      if (wsData.brandName) applyBrandName(wsData.brandName);
+      if (wsData.themeColor) applyThemeColor(wsData.themeColor);
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.

@@ -41,10 +41,6 @@
           <div id="sidebar-avatar" class="avatar-preview avatar-small"></div>
           <span id="admin-email"></span>
         </div>
-        <div class="header-actions">
-          <button id="settings-btn" type="button" title="Pengaturan">⚙</button>
-          <button id="logout-btn" type="button">Keluar</button>
-        </div>
       </div>
       <div class="sidebar-search">
         <input id="customer-search-input" type="text" placeholder="Cari customer..." autocomplete="off" />
@@ -57,6 +53,7 @@
             <span id="rail-unread-badge" class="rail-badge hidden">0</span>
           </button>
           <button id="tab-archived-btn" type="button" class="rail-icon-btn" title="Arsip">🗄</button>
+          <button id="settings-btn" type="button" class="rail-icon-btn rail-icon-btn-bottom" title="Pengaturan">⚙</button>
         </div>
         <ul id="customer-list"></ul>
       </div>
@@ -89,19 +86,44 @@
   </section>
 
   <div id="settings-overlay" class="modal-overlay hidden">
-    <div class="modal-card">
-      <h2>Pengaturan Admin</h2>
-      <div class="avatar-preview-wrap">
-        <div id="avatar-preview" class="avatar-preview"></div>
+    <div class="modal-card settings-card">
+      <h2>Pengaturan</h2>
+
+      <div class="settings-tabs">
+        <button id="settings-tab-profile-btn" type="button" class="settings-tab active">Profil</button>
+        <button id="settings-tab-appearance-btn" type="button" class="settings-tab">Appearance</button>
       </div>
-      <label class="file-btn" for="photo-input">Ganti foto profil</label>
-      <input id="photo-input" type="file" accept="image/*" class="hidden" />
-      <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
-      <div class="modal-actions">
-        <button id="settings-cancel-btn" type="button" class="btn-secondary">Batal</button>
-        <button id="settings-save-btn" type="button">Simpan</button>
+
+      <div id="settings-panel-profile" class="settings-panel">
+        <div class="avatar-preview-wrap">
+          <div id="avatar-preview" class="avatar-preview"></div>
+        </div>
+        <label class="file-btn" for="photo-input">Ganti foto profil</label>
+        <input id="photo-input" type="file" accept="image/*" class="hidden" />
+        <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
+        <button id="settings-save-btn" type="button">Simpan Profil</button>
+        <p id="settings-error" class="error hidden"></p>
       </div>
-      <p id="settings-error" class="error hidden"></p>
+
+      <div id="settings-panel-appearance" class="settings-panel hidden">
+        <p class="settings-hint">Atur tampilan widget chat yang muncul di website perusahaan Anda.</p>
+        <label class="auth-label" for="appearance-brand-input">Nama Brand</label>
+        <input id="appearance-brand-input" type="text" placeholder="mis. Toko ABC" maxlength="60" />
+        <label class="auth-label" for="appearance-color-input">Warna Tema</label>
+        <div class="color-input-row">
+          <input id="appearance-color-input" type="color" />
+          <input id="appearance-color-text" type="text" placeholder="#5b8cff" maxlength="7" />
+        </div>
+        <label class="auth-label" for="appearance-icon-input">Ikon Bubble (emoji)</label>
+        <input id="appearance-icon-input" type="text" placeholder="💬" maxlength="4" />
+        <button id="appearance-save-btn" type="button">Simpan Appearance</button>
+        <p id="appearance-error" class="error hidden"></p>
+      </div>
+
+      <div class="settings-footer">
+        <button id="settings-cancel-btn" type="button" class="btn-secondary">Tutup</button>
+        <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
+      </div>
     </div>
   </div>
 

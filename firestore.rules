@@ -11,15 +11,23 @@ service cloud.firestore {
     }
 
     // workspaces/{workspaceId} = 1 dokumen per perusahaan (nama, brandName,
-    // themeColor, dst). Dibuat & dikelola manual oleh pemilik platform.
+    // themeColor, bubbleIcon, dst). Dokumennya sendiri dibuat manual oleh
+    // pemilik platform, tapi field appearance (brandName/themeColor/bubbleIcon)
+    // boleh diedit admin workspace tsb lewat menu Pengaturan > Appearance.
+    // Read dibuka publik (tanpa perlu login) supaya widget.js di website
+    // perusahaan bisa ambil branding-nya tanpa proses auth dulu.
     match /workspaces/{workspaceId} {
-      allow read: if request.auth != null;
-      allow write: if false;
+      allow read: if true;
+      allow create: if false;
+      allow delete: if false;
 
       function isWorkspaceAdmin() {
         return request.auth != null &&
           exists(/databases/$(database)/documents/workspaces/$(workspaceId)/admins/$(request.auth.uid));
       }
+
+      allow update: if isWorkspaceAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['brandName', 'themeColor', 'bubbleIcon']);
 
       // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa
       // dibuat dari aplikasi client. Admin yang bersangkutan boleh
