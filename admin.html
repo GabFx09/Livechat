@@ -87,19 +87,18 @@
     </aside>
   </section>
 
-  <section id="settings-view" class="screen hidden">
-    <header id="settings-view-header">
-      <button id="settings-back-btn" type="button" class="header-icon-btn" title="Kembali">←</button>
+  <section id="settings-profile-view" class="screen hidden">
+    <header class="settings-view-header">
+      <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
       <span>Pengaturan</span>
+      <nav class="settings-sub-nav">
+        <a href="#/settings/profile" class="settings-sub-nav-btn active">Profil</a>
+        <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
+      </nav>
     </header>
 
-    <div id="settings-view-body">
-      <div class="settings-tabs">
-        <button id="settings-tab-profile-btn" type="button" class="settings-tab active">Profil</button>
-        <button id="settings-tab-appearance-btn" type="button" class="settings-tab">Appearance</button>
-      </div>
-
-      <div id="settings-panel-profile" class="settings-panel">
+    <div class="settings-view-body">
+      <div class="settings-panel">
         <div class="avatar-preview-wrap">
           <div id="avatar-preview" class="avatar-preview"></div>
         </div>
@@ -111,7 +110,22 @@
         <p id="settings-error" class="error hidden"></p>
       </div>
 
-      <div id="settings-panel-appearance" class="settings-panel hidden">
+      <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
+    </div>
+  </section>
+
+  <section id="settings-appearance-view" class="screen hidden">
+    <header class="settings-view-header">
+      <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
+      <span>Pengaturan</span>
+      <nav class="settings-sub-nav">
+        <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
+        <a href="#/settings/appearance" class="settings-sub-nav-btn active">Appearance</a>
+      </nav>
+    </header>
+
+    <div class="settings-view-body">
+      <div class="settings-panel">
         <p class="settings-hint">Atur tampilan widget chat yang muncul di website perusahaan Anda.</p>
         <label class="auth-label" for="appearance-brand-input">Nama Brand</label>
         <input id="appearance-brand-input" type="text" placeholder="mis. Toko ABC" maxlength="60" />
@@ -125,8 +139,6 @@
         <button id="appearance-save-btn" type="button">Simpan Appearance</button>
         <p id="appearance-error" class="error hidden"></p>
       </div>
-
-      <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
     </div>
   </section>
 

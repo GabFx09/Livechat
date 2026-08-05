@@ -104,8 +104,8 @@ const railUnreadBadge = document.getElementById("rail-unread-badge");
 const customerSearchInput = document.getElementById("customer-search-input");
 
 const settingsBtn = document.getElementById("settings-btn");
-const settingsView = document.getElementById("settings-view");
-const settingsBackBtn = document.getElementById("settings-back-btn");
+const settingsProfileView = document.getElementById("settings-profile-view");
+const settingsAppearanceView = document.getElementById("settings-appearance-view");
 const avatarPreview = document.getElementById("avatar-preview");
 const photoInput = document.getElementById("photo-input");
 const displayNameInput = document.getElementById("display-name-input");
@@ -113,10 +113,6 @@ const settingsSaveBtn = document.getElementById("settings-save-btn");
 const settingsError = document.getElementById("settings-error");
 const settingsLogoutBtn = document.getElementById("settings-logout-btn");
 
-const settingsTabProfileBtn = document.getElementById("settings-tab-profile-btn");
-const settingsTabAppearanceBtn = document.getElementById("settings-tab-appearance-btn");
-const settingsPanelProfile = document.getElementById("settings-panel-profile");
-const settingsPanelAppearance = document.getElementById("settings-panel-appearance");
 const appearanceBrandInput = document.getElementById("appearance-brand-input");
 const appearanceColorInput = document.getElementById("appearance-color-input");
 const appearanceColorText = document.getElementById("appearance-color-text");
@@ -191,13 +187,20 @@ function unlockAudioOnFirstInteraction() {
 document.addEventListener("click", unlockAudioOnFirstInteraction);
 document.addEventListener("keydown", unlockAudioOnFirstInteraction);
 
+function isSettingsOpen() {
+  return (
+    !settingsProfileView.classList.contains("hidden") ||
+    !settingsAppearanceView.classList.contains("hidden")
+  );
+}
+
 // Pindah chat customer dengan Alt + panah atas/bawah (panah polos dipakai
 // untuk navigasi saran saved replies di kolom pesan).
 document.addEventListener("keydown", (e) => {
   if (!currentAdmin) return;
   if (!e.altKey) return;
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-  if (!settingsView.classList.contains("hidden")) return;
+  if (isSettingsOpen()) return;
 
   const entries = getVisibleCustomerEntries();
   if (entries.length === 0) return;
@@ -234,7 +237,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !statsView.classList.contains("hidden")) {
     navigateTo("open");
   }
-  if (e.key === "Escape" && !settingsView.classList.contains("hidden")) {
+  if (e.key === "Escape" && isSettingsOpen()) {
     navigateTo("open");
   }
 });
@@ -1134,7 +1137,8 @@ settingsLogoutBtn.addEventListener("click", async () => {
   tabAllBtn.classList.remove("active");
   tabArchivedBtn.classList.remove("active");
   railUnreadBadge.classList.add("hidden");
-  settingsView.classList.add("hidden");
+  settingsProfileView.classList.add("hidden");
+  settingsAppearanceView.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
   statsView.classList.add("hidden");
   customerPanel.classList.add("hidden");
@@ -1176,11 +1180,16 @@ function applyRoute() {
   if (!currentAdmin) return;
 
   const route = window.location.hash.replace(/^#\/?/, "") || "open";
-  settingsView.classList.add("hidden");
+  settingsProfileView.classList.add("hidden");
+  settingsAppearanceView.classList.add("hidden");
   statsView.classList.add("hidden");
 
-  if (route === "settings") {
-    openSettingsModal();
+  if (route === "settings" || route === "settings/profile") {
+    openProfileSettings();
+    return;
+  }
+  if (route === "settings/appearance") {
+    openAppearanceSettings();
     return;
   }
   if (route === "stats") {
@@ -1208,40 +1217,34 @@ infoCloseBtn.addEventListener("click", () => {
   customerPanel.classList.add("hidden");
 });
 
-// --- Pengaturan (nama tampilan & foto profil admin) ---
+// --- Pengaturan (nama tampilan & foto profil admin, appearance widget) ---
 
-function showSettingsTab(tab) {
-  settingsTabProfileBtn.classList.toggle("active", tab === "profile");
-  settingsTabAppearanceBtn.classList.toggle("active", tab === "appearance");
-  settingsPanelProfile.classList.toggle("hidden", tab !== "profile");
-  settingsPanelAppearance.classList.toggle("hidden", tab !== "appearance");
-}
-
-function openSettingsModal() {
+function openProfileSettings() {
   appScreen.classList.add("hidden");
   pendingPhotoDataUrl = null;
   displayNameInput.value = currentAdmin.name !== currentAdmin.email ? currentAdmin.name : "";
   renderAvatar(avatarPreview, currentAdmin.photo, currentAdmin.name);
   settingsError.classList.add("hidden");
+  settingsProfileView.classList.remove("hidden");
+}
 
+function openAppearanceSettings() {
+  appScreen.classList.add("hidden");
   appearanceBrandInput.value = currentAdmin.workspaceBrandName || "";
   appearanceColorInput.value = currentAdmin.workspaceThemeColor || "#5b8cff";
   appearanceColorText.value = currentAdmin.workspaceThemeColor || "#5b8cff";
   appearanceIconInput.value = currentAdmin.workspaceBubbleIcon || "💬";
   appearanceError.classList.add("hidden");
-
-  showSettingsTab("profile");
-  settingsView.classList.remove("hidden");
+  settingsAppearanceView.classList.remove("hidden");
 }
 
 settingsBtn.addEventListener("click", () => {
-  navigateTo("settings");
+  navigateTo("settings/profile");
 });
 
-settingsTabProfileBtn.addEventListener("click", () => showSettingsTab("profile"));
-settingsTabAppearanceBtn.addEventListener("click", () => showSettingsTab("appearance"));
-
-settingsBackBtn.addEventListener("click", () => navigateTo("open"));
+document.querySelectorAll(".settings-back-btn").forEach((btn) => {
+  btn.addEventListener("click", () => navigateTo("open"));
+});
 
 appearanceColorInput.addEventListener("input", () => {
   appearanceColorText.value = appearanceColorInput.value;
