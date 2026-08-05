@@ -71,7 +71,9 @@ Ulangi 4b + 4c kalau perusahaan itu mau lebih dari 1 admin (tiap admin dapat use
 ### 4d. Berikan ke perusahaan tsb
 
 - **Admin login**: `https://gabfx09.github.io/Livechat/admin.html` (URL sama untuk semua perusahaan, tidak perlu dibedakan) + email/password dari 4b.
-- **Link chat langsung** (mis. buat bio WhatsApp/QR code): `https://gabfx09.github.io/Livechat/index.html?w=WORKSPACE_ID`
+- **Link chat langsung** (mis. buat bio WhatsApp/QR code) — dua format, sama-sama valid:
+  - Bersih: `https://gabfx09.github.io/Livechat/WORKSPACE_ID/`
+  - Atau: `https://gabfx09.github.io/Livechat/?w=WORKSPACE_ID`
 - **Snippet widget** untuk ditempel di website mereka — lihat bagian "Widget untuk website perusahaan" di bawah.
 
 ## 5. Coba jalankan secara lokal (opsional tapi disarankan)
@@ -124,6 +126,8 @@ Tiap perusahaan tempel snippet ini sebelum tag `</body>` di HTML website mereka,
 </script>
 <!-- End LiveChat Widget code -->
 ```
+
+**Catatan teknis soal URL bersih** (`/Livechat/WORKSPACE_ID/`): karena GitHub Pages tidak mendukung URL dinamis, ini disiasati lewat file `404.html` (isinya sama seperti `index.html`, dengan path aset absolut) — GitHub Pages otomatis menampilkan `404.html` untuk path apa pun yang tidak match file/folder asli, lalu `customer.js` membaca ID workspace dari segmen terakhir URL. Kalau nanti ganti nama repo GitHub, update juga `BASE_SEGMENTS`/path absolut di `404.html` dan `js/customer.js` supaya tetap cocok.
 
 Cara kerjanya:
 - Muncul bubble 💬 melayang di pojok kanan bawah, warna & nama sesuai `themeColor`/`brandName` yang diisi di config.
