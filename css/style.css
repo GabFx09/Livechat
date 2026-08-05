@@ -598,61 +598,73 @@ html, body {
   text-align: left;
 }
 
-/* Dashboard Statistik */
-.stats-card {
-  max-width: 460px;
-  text-align: left;
+/* Dashboard Statistik (halaman penuh) */
+#stats-view {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
 }
 
-.stats-header-row {
+#stats-view-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 1.05rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 2;
 }
 
-.stats-header-row h2 {
-  margin: 0;
+#stats-view-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px clamp(20px, 4vw, 56px);
 }
 
 .stats-summary-row {
   display: flex;
-  gap: 10px;
-  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
 }
 
 .stats-summary-card {
   flex: 1;
-  min-width: 0;
-  background: var(--panel-alt);
-  border-radius: 10px;
-  padding: 12px 10px;
+  min-width: 160px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
 
 .stats-summary-label {
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 
 .stats-summary-value {
-  font-size: 1.5rem;
+  font-size: 2.1rem;
   font-weight: 700;
   color: var(--text);
   line-height: 1.2;
 }
 
 .stats-summary-sub {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: var(--text-dim);
 }
 
 .stats-delta {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 600;
 }
 
@@ -660,9 +672,18 @@ html, body {
 .stats-delta.down { color: #ff6b6b; }
 .stats-delta.flat { color: var(--text-dim); }
 
+.stats-chart-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px clamp(16px, 3vw, 32px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  max-width: 900px;
+}
+
 .stats-chart-title {
-  margin: 0 0 10px;
-  font-size: 0.8rem;
+  margin: 0 0 20px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-dim);
   display: flex;
@@ -673,14 +694,14 @@ html, body {
 .stats-chart-total {
   font-weight: 400;
   color: var(--text-dim);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
 }
 
 .stats-chart {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
-  height: 110px;
+  gap: 3px;
+  height: 220px;
   padding: 0 2px;
   border-bottom: 1px solid var(--border);
 }
@@ -697,7 +718,7 @@ html, body {
 .stats-bar {
   width: 100%;
   min-height: 2px;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px 4px 0 0;
   background: var(--accent);
   opacity: 0.75;
   transition: opacity 0.1s ease;
@@ -721,8 +742,8 @@ html, body {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 0.7rem;
+  padding: 5px 9px;
+  font-size: 0.72rem;
   white-space: nowrap;
   color: var(--text);
   opacity: 0;
@@ -739,9 +760,23 @@ html, body {
 .stats-chart-axis {
   display: flex;
   justify-content: space-between;
-  margin-top: 6px;
-  font-size: 0.7rem;
+  margin-top: 8px;
+  font-size: 0.74rem;
   color: var(--text-dim);
+}
+
+@media (max-width: 640px) {
+  .stats-summary-card {
+    min-width: 130px;
+  }
+
+  .stats-summary-value {
+    font-size: 1.6rem;
+  }
+
+  .stats-chart {
+    height: 150px;
+  }
 }
 
 .saved-replies-card h2 {

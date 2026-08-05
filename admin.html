@@ -142,13 +142,13 @@
     </div>
   </div>
 
-  <div id="stats-overlay" class="modal-overlay hidden">
-    <div class="modal-card stats-card">
-      <div class="stats-header-row">
-        <h2>Statistik Chat</h2>
-        <button id="stats-close-btn" type="button" class="header-icon-btn">✕</button>
-      </div>
+  <section id="stats-view" class="screen hidden">
+    <header id="stats-view-header">
+      <button id="stats-back-btn" type="button" class="header-icon-btn" title="Kembali">←</button>
+      <span>Statistik Chat</span>
+    </header>
 
+    <div id="stats-view-body">
       <div class="stats-summary-row">
         <div class="stats-summary-card">
           <span class="stats-summary-label">Hari Ini</span>
@@ -165,16 +165,23 @@
           <span id="stats-today-new-customers" class="stats-summary-value">0</span>
           <span class="stats-summary-sub">hari ini</span>
         </div>
+        <div class="stats-summary-card">
+          <span class="stats-summary-label">Total Customer</span>
+          <span id="stats-total-customers" class="stats-summary-value">0</span>
+          <span class="stats-summary-sub"><span id="stats-open-customers">0</span> masih aktif</span>
+        </div>
       </div>
 
-      <h3 class="stats-chart-title">30 Hari Terakhir <span id="stats-chart-total" class="stats-chart-total"></span></h3>
-      <div id="stats-chart" class="stats-chart"></div>
-      <div class="stats-chart-axis">
-        <span id="stats-axis-start"></span>
-        <span id="stats-axis-end">Hari ini</span>
+      <div class="stats-chart-card">
+        <h3 class="stats-chart-title">30 Hari Terakhir <span id="stats-chart-total" class="stats-chart-total"></span></h3>
+        <div id="stats-chart" class="stats-chart"></div>
+        <div class="stats-chart-axis">
+          <span id="stats-axis-start"></span>
+          <span id="stats-axis-end">Hari ini</span>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 
   <script type="module" src="js/admin.js"></script>
 </body>

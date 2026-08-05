@@ -133,11 +133,13 @@ const savedRepliesCloseBtn = document.getElementById("saved-replies-close-btn");
 const replySuggestionsEl = document.getElementById("reply-suggestions");
 
 const statsBtn = document.getElementById("stats-btn");
-const statsOverlay = document.getElementById("stats-overlay");
-const statsCloseBtn = document.getElementById("stats-close-btn");
+const statsView = document.getElementById("stats-view");
+const statsBackBtn = document.getElementById("stats-back-btn");
 const statsTodayCount = document.getElementById("stats-today-count");
 const statsYesterdayCount = document.getElementById("stats-yesterday-count");
 const statsTodayNewCustomers = document.getElementById("stats-today-new-customers");
+const statsTotalCustomers = document.getElementById("stats-total-customers");
+const statsOpenCustomers = document.getElementById("stats-open-customers");
 const statsDeltaEl = document.getElementById("stats-delta");
 const statsChartEl = document.getElementById("stats-chart");
 const statsChartTotal = document.getElementById("stats-chart-total");
@@ -229,7 +231,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !savedRepliesOverlay.classList.contains("hidden")) {
     savedRepliesOverlay.classList.add("hidden");
   }
-  if (e.key === "Escape" && !statsOverlay.classList.contains("hidden")) {
+  if (e.key === "Escape" && !statsView.classList.contains("hidden")) {
     navigateTo("open");
   }
   if (e.key === "Escape" && !settingsOverlay.classList.contains("hidden")) {
@@ -410,12 +412,20 @@ function formatShortDateWIB(dateKey) {
 }
 
 async function openStats() {
-  statsOverlay.classList.remove("hidden");
+  appScreen.classList.add("hidden");
+  statsView.classList.remove("hidden");
   statsChartEl.innerHTML = "";
   statsTodayCount.textContent = "…";
   statsYesterdayCount.textContent = "…";
   statsTodayNewCustomers.textContent = "…";
   statsDeltaEl.textContent = "";
+
+  let openCount = 0;
+  customersDataMap.forEach((data) => {
+    if (!data.archived) openCount += 1;
+  });
+  statsTotalCustomers.textContent = String(customersDataMap.size);
+  statsOpenCustomers.textContent = String(openCount);
 
   const DAYS = 30;
   const startKey = dateKeyDaysAgoWIB(DAYS - 1);
@@ -488,7 +498,7 @@ async function openStats() {
 }
 
 statsBtn.addEventListener("click", () => navigateTo("stats"));
-statsCloseBtn.addEventListener("click", () => navigateTo("open"));
+statsBackBtn.addEventListener("click", () => navigateTo("open"));
 
 // --- Saran otomatis saved replies saat mengetik di kolom pesan ---
 
@@ -1126,7 +1136,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   railUnreadBadge.classList.add("hidden");
   settingsOverlay.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
-  statsOverlay.classList.add("hidden");
+  statsView.classList.add("hidden");
   customerPanel.classList.add("hidden");
   infoToggleBtn.classList.add("hidden");
   appScreen.classList.add("hidden");
@@ -1167,9 +1177,10 @@ function applyRoute() {
 
   const route = window.location.hash.replace(/^#\/?/, "") || "open";
   settingsOverlay.classList.add("hidden");
-  statsOverlay.classList.add("hidden");
+  statsView.classList.add("hidden");
 
   if (route === "settings") {
+    appScreen.classList.remove("hidden");
     openSettingsModal();
     return;
   }
@@ -1178,6 +1189,7 @@ function applyRoute() {
     return;
   }
 
+  appScreen.classList.remove("hidden");
   const view = route === "open" ? "active" : route;
   if (view !== "active" && view !== "all" && view !== "archived") return;
   setListView(view);
