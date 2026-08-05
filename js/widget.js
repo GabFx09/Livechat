@@ -1,12 +1,17 @@
 (function () {
-  // ==== Kustomisasi (boleh diedit manual) ====
-  var THEME_COLOR = "#5b8cff"; // warna bubble & header, isi kode hex warna brand Anda
-  var BRAND_NAME = "Live Chat"; // nama yang muncul di header jendela chat
-  var BUBBLE_ICON = "💬"; // emoji/simbol di tombol bubble
-  // ============================================
+  var config = window.__livechatConfig || {};
+
+  if (!config.workspaceId) {
+    console.error("LiveChat widget: workspaceId belum diisi di window.__livechatConfig.");
+    return;
+  }
+
+  var THEME_COLOR = config.themeColor || "#5b8cff";
+  var BRAND_NAME = config.brandName || "Live Chat";
+  var BUBBLE_ICON = config.bubbleIcon || "💬";
 
   var CHAT_ORIGIN = "https://gabfx09.github.io/Livechat";
-  var CHAT_URL = CHAT_ORIGIN + "/index.html";
+  var CHAT_URL = CHAT_ORIGIN + "/index.html?w=" + encodeURIComponent(config.workspaceId);
   var MOBILE_BREAKPOINT = 640;
 
   if (document.getElementById("livechat-widget-bubble")) return; // sudah ada, jangan dobel

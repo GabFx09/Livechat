@@ -2,60 +2,77 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    // adminIndex/{uid} = penunjuk cepat "admin ini kerja di workspace mana".
+    // Dibuat manual oleh pemilik platform lewat Firebase Console saat
+    // membuat admin baru, tidak bisa dibuat/diubah dari aplikasi client.
+    match /adminIndex/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
-    // Dokumen admin dibuat manual lewat Firebase Console (Firestore > Data),
-    // tidak bisa dibuat dari aplikasi client demi keamanan. Admin yang
-    // bersangkutan boleh mengubah profilnya sendiri (nama tampilan, foto).
-    match /admins/{adminId} {
-      allow read: if request.auth != null && request.auth.uid == adminId;
-      allow create: if false;
-      allow update: if request.auth != null && request.auth.uid == adminId;
-      allow delete: if false;
+    // workspaces/{workspaceId} = 1 dokumen per perusahaan (nama, brandName,
+    // themeColor, dst). Dibuat & dikelola manual oleh pemilik platform.
+    match /workspaces/{workspaceId} {
+      allow read: if request.auth != null;
+      allow write: if false;
 
-      // Saved replies (balasan cepat) milik admin itu sendiri.
-      match /savedReplies/{replyId} {
-        allow read, write: if request.auth != null && request.auth.uid == adminId;
+      function isWorkspaceAdmin() {
+        return request.auth != null &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)/admins/$(request.auth.uid));
       }
-    }
 
-    // customers/{customerId} = profil singkat tiap pengunjung (nama, pesan terakhir, dst).
-    // customerId sama dengan uid anonim milik pengunjung itu sendiri.
-    match /customers/{customerId} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == customerId || isAdmin());
-      allow create: if request.auth != null && request.auth.uid == customerId;
-      allow update: if request.auth != null &&
-        (request.auth.uid == customerId || isAdmin());
-      allow delete: if false;
-    }
+      // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa
+      // dibuat dari aplikasi client. Admin yang bersangkutan boleh
+      // mengubah profilnya sendiri (nama tampilan, foto).
+      match /admins/{adminId} {
+        allow read: if request.auth != null && request.auth.uid == adminId;
+        allow create: if false;
+        allow update: if request.auth != null && request.auth.uid == adminId;
+        allow delete: if false;
 
-    // chats/{customerId}/messages = isi percakapan customer tsb dengan admin.
-    // Pesan bertipe teks (field text) atau gambar (field imageBase64).
-    // Admin boleh edit/hapus pesan miliknya sendiri saja (senderId == uid-nya).
-    match /chats/{customerId}/messages/{messageId} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == customerId || isAdmin());
+        match /savedReplies/{replyId} {
+          allow read, write: if request.auth != null && request.auth.uid == adminId;
+        }
+      }
 
-      allow create: if request.auth != null &&
-        request.resource.data.type in ['text', 'image'] &&
-        (
-          (request.auth.uid == customerId && request.resource.data.sender == 'customer') ||
-          (isAdmin() && request.resource.data.sender == 'admin' &&
-            request.resource.data.senderId == request.auth.uid)
-        );
+      // customers/{customerId} = profil singkat tiap pengunjung workspace ini.
+      // customerId sama dengan uid anonim milik pengunjung itu sendiri.
+      match /customers/{customerId} {
+        allow read: if request.auth != null && request.auth.uid == customerId;
+        allow read: if isWorkspaceAdmin();
 
-      allow update: if request.auth != null && isAdmin() &&
-        resource.data.sender == 'admin' &&
-        resource.data.senderId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt']);
+        allow create: if request.auth != null && request.auth.uid == customerId;
 
-      allow delete: if request.auth != null && isAdmin() &&
-        resource.data.sender == 'admin' &&
-        resource.data.senderId == request.auth.uid;
+        allow update: if request.auth != null && request.auth.uid == customerId;
+        allow update: if isWorkspaceAdmin();
+
+        allow delete: if false;
+      }
+
+      // chats/{customerId}/messages = isi percakapan customer tsb dengan admin workspace ini.
+      match /chats/{customerId}/messages/{messageId} {
+        allow read: if request.auth != null && request.auth.uid == customerId;
+        allow read: if isWorkspaceAdmin();
+
+        allow create: if request.auth != null &&
+          request.auth.uid == customerId &&
+          request.resource.data.sender == 'customer' &&
+          request.resource.data.type in ['text', 'image'];
+
+        allow create: if isWorkspaceAdmin() &&
+          request.resource.data.sender == 'admin' &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.type in ['text', 'image'];
+
+        allow update: if isWorkspaceAdmin() &&
+          resource.data.sender == 'admin' &&
+          resource.data.senderId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt']);
+
+        allow delete: if isWorkspaceAdmin() &&
+          resource.data.sender == 'admin' &&
+          resource.data.senderId == request.auth.uid;
+      }
     }
   }
 }

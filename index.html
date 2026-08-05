@@ -8,11 +8,22 @@
 </head>
 <body>
 
+  <section id="workspace-error-screen" class="screen hidden">
+    <div class="auth-layout">
+      <div class="auth-form-panel" style="width: 100%;">
+        <div class="auth-form-card" style="text-align: center; max-width: 380px;">
+          <h2>Workspace tidak ditemukan</h2>
+          <p class="auth-subtitle">Link ini tidak menyertakan ID workspace yang valid (parameter <code>?w=</code> di URL). Hubungi penyedia livechat Anda untuk mendapatkan link/kode widget yang benar.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="login-screen" class="screen">
     <div class="auth-layout">
       <div class="auth-brand">
         <div class="auth-brand-icon">💬</div>
-        <h1>Customer Service</h1>
+        <h1 data-brand-name>Customer Service</h1>
         <p>Tim kami siap membantu Anda secara real-time. Masukkan username untuk memulai percakapan dengan tim customer service kami.</p>
       </div>
       <div class="auth-form-panel">

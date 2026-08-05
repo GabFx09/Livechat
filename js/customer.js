@@ -24,8 +24,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-let currentUser = null; // { uid, name }
+const workspaceId = new URLSearchParams(window.location.search).get("w");
 
+let currentUser = null; // { uid, name }
+let workspaceBrandName = null;
+
+const workspaceErrorScreen = document.getElementById("workspace-error-screen");
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const nameInput = document.getElementById("name-input");
@@ -36,10 +40,23 @@ const messagesEl = document.getElementById("messages");
 const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
+const brandNameEls = document.querySelectorAll("[data-brand-name]");
+
+function wsPath(...segments) {
+  return ["workspaces", workspaceId, ...segments];
+}
 
 function showStartError(message) {
   startError.textContent = message;
   startError.classList.remove("hidden");
+}
+
+function applyBrandName(name) {
+  workspaceBrandName = name;
+  document.title = name;
+  brandNameEls.forEach((el) => {
+    el.textContent = name;
+  });
 }
 
 // Ambil IP & perkiraan lokasi dari layanan lookup publik (tanpa perlu izin
@@ -82,7 +99,7 @@ async function captureVisitorInfo(uid) {
     return;
   }
   try {
-    await setDoc(doc(db, "customers", uid), info, { merge: true });
+    await setDoc(doc(db, ...wsPath("customers", uid)), info, { merge: true });
   } catch (err) {
     console.error("Gagal menyimpan info IP/lokasi:", err);
   }
@@ -116,7 +133,7 @@ function renderMessage(m) {
 
   const senderLabel = document.createElement("span");
   senderLabel.className = "sender";
-  senderLabel.textContent = m.sender === "customer" ? "Anda" : m.senderName || "Customer Service";
+  senderLabel.textContent = m.sender === "customer" ? "Anda" : m.senderName || workspaceBrandName || "Customer Service";
   senderRow.appendChild(senderLabel);
 
   if (m.edited) {
@@ -159,7 +176,7 @@ function updateChatHeader() {
     chatHeader.appendChild(avatar);
   }
   const span = document.createElement("span");
-  span.textContent = (knownAdminInfo && knownAdminInfo.name) || "Customer Service";
+  span.textContent = (knownAdminInfo && knownAdminInfo.name) || workspaceBrandName || "Customer Service";
   chatHeader.appendChild(span);
 }
 
@@ -173,7 +190,7 @@ function enterChat(uid, name) {
 
 function listenMessages() {
   const q = query(
-    collection(db, "chats", currentUser.uid, "messages"),
+    collection(db, ...wsPath("chats", currentUser.uid, "messages")),
     orderBy("timestamp", "asc")
   );
   onSnapshot(q, (snap) => {
@@ -196,7 +213,7 @@ function listenMessages() {
 
 async function touchCustomerDoc(lastMessage) {
   await setDoc(
-    doc(db, "customers", currentUser.uid),
+    doc(db, ...wsPath("customers", currentUser.uid)),
     {
       name: currentUser.name,
       lastMessage,
@@ -218,7 +235,7 @@ messageForm.addEventListener("submit", async (e) => {
   messageInput.value = "";
 
   try {
-    await addDoc(collection(db, "chats", currentUser.uid, "messages"), {
+    await addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
       sender: "customer",
       type: "text",
       text,
@@ -245,7 +262,7 @@ imageInput.addEventListener("change", async () => {
 
   try {
     const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
-    await addDoc(collection(db, "chats", currentUser.uid, "messages"), {
+    await addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
       sender: "customer",
       type: "image",
       imageBase64: dataUrl,
@@ -274,7 +291,7 @@ startBtn.addEventListener("click", async () => {
       user = cred.user;
     }
     await setDoc(
-      doc(db, "customers", user.uid),
+      doc(db, ...wsPath("customers", user.uid)),
       {
         name,
         lastMessage: "",
@@ -295,16 +312,29 @@ nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") startBtn.click();
 });
 
-// Auto rejoin if this browser already has a session with a saved name.
-onAuthStateChanged(auth, async (user) => {
-  if (!user || currentUser) return;
+async function init() {
+  if (!workspaceId) {
+    workspaceErrorScreen.classList.remove("hidden");
+    loginScreen.classList.add("hidden");
+    return;
+  }
+
   try {
-    const snap = await getDoc(doc(db, "customers", user.uid));
-    if (snap.exists() && snap.data().name) {
-      enterChat(user.uid, snap.data().name);
-      captureVisitorInfo(user.uid);
+    const cred = auth.currentUser ? { user: auth.currentUser } : await signInAnonymously(auth);
+    const wsSnap = await getDoc(doc(db, ...wsPath()));
+    if (wsSnap.exists() && wsSnap.data().brandName) {
+      applyBrandName(wsSnap.data().brandName);
+    }
+
+    // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
+    const customerSnap = await getDoc(doc(db, ...wsPath("customers", cred.user.uid)));
+    if (customerSnap.exists() && customerSnap.data().name) {
+      enterChat(cred.user.uid, customerSnap.data().name);
+      captureVisitorInfo(cred.user.uid);
     }
   } catch (err) {
-    // Ignore: user will just see the start screen.
+    console.error("Gagal memuat workspace:", err);
   }
-});
+}
+
+init();

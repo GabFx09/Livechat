@@ -26,7 +26,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-let currentAdmin = null; // { uid, email, name, photo }
+let currentAdmin = null; // { uid, email, name, photo, workspaceId, workspaceName }
 let activeCustomerUid = null;
 let activeCustomerName = "";
 let unsubMessages = null;
@@ -37,6 +37,10 @@ let currentListView = "active"; // "active" | "archived"
 let autoArchiveIntervalId = null;
 
 const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis diarsipkan
+
+function wsPath(...segments) {
+  return ["workspaces", currentAdmin.workspaceId, ...segments];
+}
 
 const loginScreen = document.getElementById("login-screen");
 const appScreen = document.getElementById("app-screen");
@@ -179,7 +183,7 @@ savedReplyForm.addEventListener("submit", async (e) => {
   if (!text || !currentAdmin) return;
   savedReplyInput.value = "";
   try {
-    await addDoc(collection(db, "admins", currentAdmin.uid, "savedReplies"), {
+    await addDoc(collection(db, ...wsPath("admins", currentAdmin.uid, "savedReplies")), {
       text,
       createdAt: serverTimestamp()
     });
@@ -234,11 +238,13 @@ function renderAvatar(el, photo, name) {
   }
 }
 
-function enterDashboard(uid, email, adminData = {}) {
+async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   ensureAudio();
   currentAdmin = {
     uid,
     email,
+    workspaceId,
+    workspaceName: null,
     name: adminData.name || email,
     photo: adminData.photo || null
   };
@@ -246,6 +252,17 @@ function enterDashboard(uid, email, adminData = {}) {
   renderAvatar(sidebarAvatarEl, currentAdmin.photo, currentAdmin.name);
   loginScreen.classList.add("hidden");
   appScreen.classList.remove("hidden");
+
+  try {
+    const wsSnap = await getDoc(doc(db, ...wsPath()));
+    if (wsSnap.exists()) {
+      currentAdmin.workspaceName = wsSnap.data().name || null;
+      if (currentAdmin.workspaceName) document.title = currentAdmin.workspaceName + " - Admin";
+    }
+  } catch (err) {
+    // biarkan, tidak krusial
+  }
+
   listenCustomers();
   listenSavedReplies();
 
@@ -256,7 +273,7 @@ function enterDashboard(uid, email, adminData = {}) {
 function listenSavedReplies() {
   if (unsubSavedReplies) unsubSavedReplies();
   const q = query(
-    collection(db, "admins", currentAdmin.uid, "savedReplies"),
+    collection(db, ...wsPath("admins", currentAdmin.uid, "savedReplies")),
     orderBy("createdAt", "asc")
   );
   unsubSavedReplies = onSnapshot(q, (snap) => {
@@ -294,7 +311,7 @@ function listenSavedReplies() {
       deleteBtn.textContent = "🗑";
       deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        deleteDoc(doc(db, "admins", currentAdmin.uid, "savedReplies", docSnap.id)).catch(() => {});
+        deleteDoc(doc(db, ...wsPath("admins", currentAdmin.uid, "savedReplies", docSnap.id))).catch(() => {});
       });
 
       li.appendChild(textEl);
@@ -407,7 +424,7 @@ function checkAutoArchive() {
     if (!data.lastMessageAt) return;
     if (now - data.lastMessageAt.toMillis() >= AUTO_ARCHIVE_MS) {
       setDoc(
-        doc(db, "customers", uid),
+        doc(db, ...wsPath("customers", uid)),
         { archived: true, archivedAt: serverTimestamp(), expireAt: oneYearFromNow() },
         { merge: true }
       ).catch(() => {});
@@ -420,14 +437,14 @@ async function toggleArchive(uid, archived) {
     const update = archived
       ? { archived: true, archivedAt: serverTimestamp(), expireAt: oneYearFromNow() }
       : { archived: false, archivedAt: null, expireAt: null };
-    await setDoc(doc(db, "customers", uid), update, { merge: true });
+    await setDoc(doc(db, ...wsPath("customers", uid)), update, { merge: true });
   } catch (err) {
     alert("Gagal mengubah status arsip: " + err.message);
   }
 }
 
 function listenCustomers() {
-  const q = query(collection(db, "customers"), orderBy("lastMessageAt", "desc"));
+  const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"));
   onSnapshot(q, (snap) => {
     let shouldPlaySound = false;
     customersDataMap.clear();
@@ -684,7 +701,7 @@ function startEditMessage(messageId, currentText, bubbleEl) {
     if (!newText || !activeCustomerUid) return;
     saveBtn.disabled = true;
     try {
-      await updateDoc(doc(db, "chats", activeCustomerUid, "messages", messageId), {
+      await updateDoc(doc(db, ...wsPath("chats", activeCustomerUid, "messages", messageId)), {
         text: newText,
         edited: true,
         editedAt: serverTimestamp()
@@ -700,7 +717,7 @@ async function deleteMessage(messageId) {
   if (!activeCustomerUid) return;
   if (!confirm("Hapus pesan ini?")) return;
   try {
-    await deleteDoc(doc(db, "chats", activeCustomerUid, "messages", messageId));
+    await deleteDoc(doc(db, ...wsPath("chats", activeCustomerUid, "messages", messageId)));
   } catch (err) {
     alert("Gagal menghapus pesan: " + err.message);
   }
@@ -720,7 +737,7 @@ function openCustomer(uid, name) {
   }
 
   if ((customersDataMap.get(uid)?.unreadCount || 0) > 0) {
-    setDoc(doc(db, "customers", uid), { unreadCount: 0 }, { merge: true }).catch(() => {});
+    setDoc(doc(db, ...wsPath("customers", uid)), { unreadCount: 0 }, { merge: true }).catch(() => {});
   }
 
   renderCustomerList();
@@ -728,7 +745,7 @@ function openCustomer(uid, name) {
   if (unsubMessages) unsubMessages();
 
   const q = query(
-    collection(db, "chats", uid, "messages"),
+    collection(db, ...wsPath("chats", uid, "messages")),
     orderBy("timestamp", "asc")
   );
   unsubMessages = onSnapshot(q, (snap) => {
@@ -742,7 +759,7 @@ function openCustomer(uid, name) {
 
 async function touchCustomerDoc(lastMessage) {
   await setDoc(
-    doc(db, "customers", activeCustomerUid),
+    doc(db, ...wsPath("customers", activeCustomerUid)),
     {
       lastMessage,
       lastMessageAt: serverTimestamp(),
@@ -763,7 +780,7 @@ messageForm.addEventListener("submit", async (e) => {
   messageInput.value = "";
 
   try {
-    await addDoc(collection(db, "chats", activeCustomerUid, "messages"), {
+    await addDoc(collection(db, ...wsPath("chats", activeCustomerUid, "messages")), {
       sender: "admin",
       senderId: currentAdmin.uid,
       type: "text",
@@ -785,7 +802,7 @@ imageInput.addEventListener("change", async () => {
 
   try {
     const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
-    await addDoc(collection(db, "chats", activeCustomerUid, "messages"), {
+    await addDoc(collection(db, ...wsPath("chats", activeCustomerUid, "messages")), {
       sender: "admin",
       senderId: currentAdmin.uid,
       type: "image",
@@ -799,6 +816,19 @@ imageInput.addEventListener("change", async () => {
     alert(err.message || "Gagal mengirim gambar.");
   }
 });
+
+// Cari workspace tempat uid ini terdaftar sebagai admin, lewat penunjuk
+// adminIndex/{uid} (dibuat manual oleh pemilik platform lewat Console).
+async function resolveAdminWorkspace(uid) {
+  const indexSnap = await getDoc(doc(db, "adminIndex", uid));
+  if (!indexSnap.exists() || !indexSnap.data().workspaceId) return null;
+  const workspaceId = indexSnap.data().workspaceId;
+
+  const adminSnap = await getDoc(doc(db, "workspaces", workspaceId, "admins", uid));
+  if (!adminSnap.exists()) return null;
+
+  return { workspaceId, adminData: adminSnap.data() };
+}
 
 loginBtn.addEventListener("click", async () => {
   ensureAudio(); // buka/unlock audio di dalam gesture klik user
@@ -814,14 +844,14 @@ loginBtn.addEventListener("click", async () => {
 
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    const adminDoc = await getDoc(doc(db, "admins", cred.user.uid));
-    if (!adminDoc.exists()) {
+    const resolved = await resolveAdminWorkspace(cred.user.uid);
+    if (!resolved) {
       await signOut(auth);
-      showLoginError("Akun ini bukan admin.");
+      showLoginError("Akun ini bukan admin workspace mana pun.");
       loginBtn.disabled = false;
       return;
     }
-    enterDashboard(cred.user.uid, cred.user.email, adminDoc.data());
+    await enterDashboard(cred.user.uid, cred.user.email, resolved.workspaceId, resolved.adminData);
   } catch (err) {
     showLoginError("Gagal masuk: " + err.message);
     loginBtn.disabled = false;
@@ -921,7 +951,7 @@ settingsSaveBtn.addEventListener("click", async () => {
     const update = { name: name || currentAdmin.email };
     if (pendingPhotoDataUrl) update.photo = pendingPhotoDataUrl;
 
-    await setDoc(doc(db, "admins", currentAdmin.uid), update, { merge: true });
+    await setDoc(doc(db, ...wsPath("admins", currentAdmin.uid)), update, { merge: true });
 
     currentAdmin.name = update.name;
     if (pendingPhotoDataUrl) currentAdmin.photo = pendingPhotoDataUrl;
@@ -940,9 +970,9 @@ settingsSaveBtn.addEventListener("click", async () => {
 onAuthStateChanged(auth, async (user) => {
   if (!user || currentAdmin) return;
   try {
-    const adminDoc = await getDoc(doc(db, "admins", user.uid));
-    if (adminDoc.exists()) {
-      enterDashboard(user.uid, user.email, adminDoc.data());
+    const resolved = await resolveAdminWorkspace(user.uid);
+    if (resolved) {
+      await enterDashboard(user.uid, user.email, resolved.workspaceId, resolved.adminData);
     }
   } catch (err) {
     // Ignore: admin will just see the login screen.
