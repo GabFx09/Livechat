@@ -29,6 +29,7 @@ const workspaceId = new URLSearchParams(window.location.search).get("w");
 let currentUser = null; // { uid, name }
 let workspaceBrandName = null;
 
+const loadingScreen = document.getElementById("loading-screen");
 const workspaceErrorScreen = document.getElementById("workspace-error-screen");
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
@@ -323,8 +324,8 @@ nameInput.addEventListener("keydown", (e) => {
 
 async function init() {
   if (!workspaceId) {
+    loadingScreen.classList.add("hidden");
     workspaceErrorScreen.classList.remove("hidden");
-    loginScreen.classList.add("hidden");
     return;
   }
 
@@ -340,9 +341,14 @@ async function init() {
     if (customerSnap.exists() && customerSnap.data().name) {
       enterChat(user.uid, customerSnap.data().name);
       captureVisitorInfo(user.uid);
+    } else {
+      loginScreen.classList.remove("hidden");
     }
   } catch (err) {
     console.error("Gagal memuat workspace:", err);
+    loginScreen.classList.remove("hidden");
+  } finally {
+    loadingScreen.classList.add("hidden");
   }
 }
 

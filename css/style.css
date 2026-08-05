@@ -29,6 +29,18 @@ html, body {
 }
 
 /* Login screen */
+#loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.loading-text {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
 #login-screen {
   display: flex;
   align-items: center;

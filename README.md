@@ -110,13 +110,18 @@ Tiap perusahaan tempel snippet ini sebelum tag `</body>` di HTML website mereka,
 ```html
 <!-- Begin LiveChat Widget code -->
 <script>
-  window.__livechatConfig = {
-    workspaceId: "WORKSPACE_ID_PERUSAHAAN_INI",
-    brandName: "Nama Perusahaan",
-    themeColor: "#5b8cff"
-  };
+  (function (w, d) {
+    w.__livechatConfig = {
+      workspaceId: "WORKSPACE_ID_PERUSAHAAN_INI",
+      brandName: "Nama Perusahaan",
+      themeColor: "#5b8cff"
+    };
+    var s = d.createElement("script");
+    s.src = "https://gabfx09.github.io/Livechat/js/widget.js";
+    s.async = true;
+    d.head.appendChild(s);
+  })(window, document);
 </script>
-<script src="https://gabfx09.github.io/Livechat/js/widget.js" async></script>
 <!-- End LiveChat Widget code -->
 ```
 

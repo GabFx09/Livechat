@@ -42,6 +42,7 @@ function wsPath(...segments) {
   return ["workspaces", currentAdmin.workspaceId, ...segments];
 }
 
+const loadingScreen = document.getElementById("loading-screen");
 const loginScreen = document.getElementById("login-screen");
 const appScreen = document.getElementById("app-screen");
 const emailInput = document.getElementById("email-input");
@@ -966,17 +967,29 @@ settingsSaveBtn.addEventListener("click", async () => {
   }
 });
 
-// Auto re-enter dashboard if this browser already has an admin session.
+// Cek sesi login tersimpan dulu (tampilkan layar "Memuat...") sebelum
+// memutuskan mau tampilkan dashboard atau form login, supaya tidak ada
+// kedipan form login sesaat sebelum auto-login selesai diproses.
 onAuthStateChanged(auth, async (user) => {
-  if (!user || currentAdmin) return;
+  if (!user) {
+    loadingScreen.classList.add("hidden");
+    if (!currentAdmin) loginScreen.classList.remove("hidden");
+    return;
+  }
+  if (currentAdmin) return;
+
   try {
     const resolved = await resolveAdminWorkspace(user.uid);
     if (resolved) {
       await enterDashboard(user.uid, user.email, resolved.workspaceId, resolved.adminData);
     } else {
       console.warn("Auto re-enter dashboard: uid ini tidak terdaftar di adminIndex/workspace manapun.", user.uid);
+      loginScreen.classList.remove("hidden");
     }
   } catch (err) {
     console.error("Auto re-enter dashboard gagal:", err);
+    loginScreen.classList.remove("hidden");
+  } finally {
+    loadingScreen.classList.add("hidden");
   }
 });
