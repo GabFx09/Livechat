@@ -827,8 +827,8 @@ html, body {
 }
 
 .typing-preview {
-  padding: 8px 20px;
-  font-size: 0.82rem;
+  padding: 12px 20px;
+  font-size: 1.05rem;
   color: var(--text-dim);
   font-style: italic;
   border-top: 1px solid var(--border);
