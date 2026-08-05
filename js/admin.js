@@ -230,7 +230,10 @@ document.addEventListener("keydown", (e) => {
     savedRepliesOverlay.classList.add("hidden");
   }
   if (e.key === "Escape" && !statsOverlay.classList.contains("hidden")) {
-    statsOverlay.classList.add("hidden");
+    navigateTo("open");
+  }
+  if (e.key === "Escape" && !settingsOverlay.classList.contains("hidden")) {
+    navigateTo("open");
   }
 });
 
@@ -337,6 +340,8 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
 
   if (autoArchiveIntervalId) clearInterval(autoArchiveIntervalId);
   autoArchiveIntervalId = setInterval(checkAutoArchive, 60000);
+
+  applyRoute();
 }
 
 function listenSavedReplies() {
@@ -482,10 +487,8 @@ async function openStats() {
   });
 }
 
-statsBtn.addEventListener("click", openStats);
-statsCloseBtn.addEventListener("click", () => {
-  statsOverlay.classList.add("hidden");
-});
+statsBtn.addEventListener("click", () => navigateTo("stats"));
+statsCloseBtn.addEventListener("click", () => navigateTo("open"));
 
 // --- Saran otomatis saved replies saat mengetik di kolom pesan ---
 
@@ -1106,6 +1109,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
     clearInterval(autoArchiveIntervalId);
     autoArchiveIntervalId = null;
   }
+  window.location.hash = "";
   await signOut(auth);
   currentAdmin = null;
   activeCustomerUid = null;
@@ -1139,6 +1143,9 @@ customerSearchInput.addEventListener("input", () => {
   renderCustomerList();
 });
 
+// --- Routing berbasis hash (#/open, #/all, #/archived, #/stats, #/settings)
+// supaya tiap menu punya link sendiri, bisa di-refresh/bookmark/share. ---
+
 function setListView(view) {
   currentListView = view;
   tabActiveBtn.classList.toggle("active", view === "active");
@@ -1147,9 +1154,40 @@ function setListView(view) {
   renderCustomerList();
 }
 
-tabActiveBtn.addEventListener("click", () => setListView("active"));
-tabAllBtn.addEventListener("click", () => setListView("all"));
-tabArchivedBtn.addEventListener("click", () => setListView("archived"));
+function navigateTo(route) {
+  if (window.location.hash === "#/" + route) {
+    applyRoute();
+  } else {
+    window.location.hash = "#/" + route;
+  }
+}
+
+function applyRoute() {
+  if (!currentAdmin) return;
+
+  const route = window.location.hash.replace(/^#\/?/, "") || "open";
+  settingsOverlay.classList.add("hidden");
+  statsOverlay.classList.add("hidden");
+
+  if (route === "settings") {
+    openSettingsModal();
+    return;
+  }
+  if (route === "stats") {
+    openStats();
+    return;
+  }
+
+  const view = route === "open" ? "active" : route;
+  if (view !== "active" && view !== "all" && view !== "archived") return;
+  setListView(view);
+}
+
+window.addEventListener("hashchange", applyRoute);
+
+tabActiveBtn.addEventListener("click", () => navigateTo("open"));
+tabAllBtn.addEventListener("click", () => navigateTo("all"));
+tabArchivedBtn.addEventListener("click", () => navigateTo("archived"));
 
 infoToggleBtn.addEventListener("click", () => {
   customerPanel.classList.toggle("hidden");
@@ -1168,7 +1206,7 @@ function showSettingsTab(tab) {
   settingsPanelAppearance.classList.toggle("hidden", tab !== "appearance");
 }
 
-settingsBtn.addEventListener("click", () => {
+function openSettingsModal() {
   pendingPhotoDataUrl = null;
   displayNameInput.value = currentAdmin.name !== currentAdmin.email ? currentAdmin.name : "";
   renderAvatar(avatarPreview, currentAdmin.photo, currentAdmin.name);
@@ -1182,14 +1220,16 @@ settingsBtn.addEventListener("click", () => {
 
   showSettingsTab("profile");
   settingsOverlay.classList.remove("hidden");
+}
+
+settingsBtn.addEventListener("click", () => {
+  navigateTo("settings");
 });
 
 settingsTabProfileBtn.addEventListener("click", () => showSettingsTab("profile"));
 settingsTabAppearanceBtn.addEventListener("click", () => showSettingsTab("appearance"));
 
-settingsCancelBtn.addEventListener("click", () => {
-  settingsOverlay.classList.add("hidden");
-});
+settingsCancelBtn.addEventListener("click", () => navigateTo("open"));
 
 appearanceColorInput.addEventListener("input", () => {
   appearanceColorText.value = appearanceColorInput.value;
@@ -1228,7 +1268,7 @@ appearanceSaveBtn.addEventListener("click", async () => {
     currentAdmin.workspaceBrandName = brandName;
     currentAdmin.workspaceThemeColor = themeColor;
     currentAdmin.workspaceBubbleIcon = bubbleIcon || "💬";
-    settingsOverlay.classList.add("hidden");
+    navigateTo("open");
   } catch (err) {
     appearanceError.textContent = "Gagal menyimpan: " + err.message;
     appearanceError.classList.remove("hidden");
@@ -1266,7 +1306,7 @@ settingsSaveBtn.addEventListener("click", async () => {
     if (pendingPhotoDataUrl) currentAdmin.photo = pendingPhotoDataUrl;
     adminEmailEl.textContent = currentAdmin.name;
     renderAvatar(sidebarAvatarEl, currentAdmin.photo, currentAdmin.name);
-    settingsOverlay.classList.add("hidden");
+    navigateTo("open");
   } catch (err) {
     settingsError.textContent = "Gagal menyimpan: " + err.message;
     settingsError.classList.remove("hidden");
