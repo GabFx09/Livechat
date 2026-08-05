@@ -144,6 +144,23 @@ function formatTimeWIB(timestamp) {
   );
 }
 
+function formatDateWIB(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "";
+  return timestamp.toDate().toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta"
+  });
+}
+
+function createDateDivider(label) {
+  const div = document.createElement("div");
+  div.className = "date-divider";
+  div.textContent = label;
+  return div;
+}
+
 function renderMessage(m) {
   const div = document.createElement("div");
   div.className = "message " + (m.sender === "customer" ? "mine" : "theirs");
@@ -223,8 +240,14 @@ function listenMessages() {
   onSnapshot(q, (snap) => {
     messagesEl.innerHTML = "";
     let latestAdminInfo = null;
+    let lastDate = null;
     snap.forEach((docSnap) => {
       const m = docSnap.data();
+      const dateLabel = formatDateWIB(m.timestamp);
+      if (dateLabel && dateLabel !== lastDate) {
+        messagesEl.appendChild(createDateDivider(dateLabel));
+        lastDate = dateLabel;
+      }
       messagesEl.appendChild(renderMessage(m));
       if (m.sender === "admin") {
         latestAdminInfo = { name: m.senderName, photo: m.senderPhoto };

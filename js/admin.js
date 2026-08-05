@@ -623,6 +623,23 @@ function formatTimeWIB(timestamp) {
   );
 }
 
+function formatDateWIB(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "";
+  return timestamp.toDate().toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta"
+  });
+}
+
+function createDateDivider(label) {
+  const div = document.createElement("div");
+  div.className = "date-divider";
+  div.textContent = label;
+  return div;
+}
+
 function renderMessage(m, messageId) {
   const div = document.createElement("div");
   div.className = "message " + (m.sender === "admin" ? "mine" : "theirs");
@@ -789,8 +806,15 @@ function openCustomer(uid, name) {
   );
   unsubMessages = onSnapshot(q, (snap) => {
     messagesEl.innerHTML = "";
+    let lastDate = null;
     snap.forEach((docSnap) => {
-      messagesEl.appendChild(renderMessage(docSnap.data(), docSnap.id));
+      const m = docSnap.data();
+      const dateLabel = formatDateWIB(m.timestamp);
+      if (dateLabel && dateLabel !== lastDate) {
+        messagesEl.appendChild(createDateDivider(dateLabel));
+        lastDate = dateLabel;
+      }
+      messagesEl.appendChild(renderMessage(m, docSnap.id));
     });
     messagesEl.scrollTop = messagesEl.scrollHeight;
   });

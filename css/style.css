@@ -712,6 +712,17 @@ html, body {
   gap: 10px;
 }
 
+.date-divider {
+  align-self: center;
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 999px;
+  margin: 4px 0;
+}
+
 .message {
   max-width: 65%;
   padding: 8px 12px;
