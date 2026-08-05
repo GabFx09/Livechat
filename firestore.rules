@@ -64,10 +64,15 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == customerId;
         allow read: if isWorkspaceAdmin();
 
+        // exists(...) di baris terakhir menolak kiriman kalau dokumen
+        // customers/{customerId}-nya sudah dihapus admin (fitur "Hapus
+        // Semua Chat") -- customer wajib mulai sesi baru dulu (yang bikin
+        // ulang dokumennya) sebelum bisa kirim pesan lagi.
         allow create: if request.auth != null &&
           request.auth.uid == customerId &&
           request.resource.data.sender == 'customer' &&
-          request.resource.data.type in ['text', 'image'];
+          request.resource.data.type in ['text', 'image'] &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId));
 
         allow create: if isWorkspaceAdmin() &&
           request.resource.data.sender == 'admin' &&

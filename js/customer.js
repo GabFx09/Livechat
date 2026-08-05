@@ -42,6 +42,10 @@ const workspaceId =
 
 let currentUser = null; // { uid, name }
 let workspaceBrandName = null;
+let sessionActive = false; // false = belum chat, atau sesi dihapus admin & belum mulai ulang
+let unsubMessages = null;
+let unsubCustomerDoc = null;
+let presenceIntervalId = null;
 
 const loadingScreen = document.getElementById("loading-screen");
 const workspaceErrorScreen = document.getElementById("workspace-error-screen");
@@ -248,12 +252,44 @@ function updateChatHeader() {
 }
 
 function enterChat(uid, name) {
+  sessionActive = true;
   currentUser = { uid, name };
   loginScreen.classList.add("hidden");
   chatScreen.classList.remove("hidden");
   updateChatHeader();
   listenMessages();
+  listenSessionAlive(uid);
   startPresenceHeartbeat();
+}
+
+// Kalau admin menghapus dokumen customers/{uid} ini (tombol "Hapus Semua
+// Chat"), dokumennya lenyap dari Firestore -- listener di bawah nangkep itu
+// realtime dan langsung mengunci sesi di sisi customer, bukan cuma pas
+// reload halaman berikutnya.
+function listenSessionAlive(uid) {
+  if (unsubCustomerDoc) unsubCustomerDoc();
+  unsubCustomerDoc = onSnapshot(doc(db, ...wsPath("customers", uid)), (snap) => {
+    if (!snap.exists()) handleSessionDeleted();
+  });
+}
+
+function handleSessionDeleted() {
+  if (!sessionActive) return; // sudah ditangani / belum pernah mulai chat
+  sessionActive = false;
+  currentUser = null;
+
+  if (unsubMessages) unsubMessages();
+  if (unsubCustomerDoc) unsubCustomerDoc();
+  if (presenceIntervalId) clearInterval(presenceIntervalId);
+  unsubMessages = null;
+  unsubCustomerDoc = null;
+  presenceIntervalId = null;
+
+  messagesEl.innerHTML = "";
+  chatScreen.classList.add("hidden");
+  nameInput.value = "";
+  loginScreen.classList.remove("hidden");
+  showStartError("Percakapan ini telah dihapus oleh admin. Silakan mulai chat baru.");
 }
 
 // Kirim lastActiveAt tiap 10 detik selagi tab chat ini sedang aktif/terlihat,
@@ -262,7 +298,7 @@ function enterChat(uid, name) {
 // jujur mencerminkan customer masih benar-benar di halaman chat.
 const PRESENCE_HEARTBEAT_MS = 10000;
 function sendHeartbeat() {
-  if (!currentUser || document.visibilityState !== "visible") return;
+  if (!currentUser || !sessionActive || document.visibilityState !== "visible") return;
   setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
     { lastActiveAt: serverTimestamp() },
@@ -274,7 +310,7 @@ function sendHeartbeat() {
 // heartbeat basi) supaya admin lihat statusnya berubah nyaris seketika lewat
 // realtime listener, bukan lewat threshold basi di admin.js.
 function sendOfflineSignal() {
-  if (!currentUser) return;
+  if (!currentUser || !sessionActive) return;
   setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
     { lastActiveAt: null },
@@ -282,25 +318,31 @@ function sendOfflineSignal() {
   ).catch(() => {});
 }
 
+// Listener visibilitychange/pagehide didaftarkan sekali di scope modul (bukan
+// tiap enterChat) supaya tidak numpuk kalau customer mulai sesi baru lagi
+// setelah sesi lamanya dihapus admin, tanpa reload halaman.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    sendHeartbeat();
+  } else {
+    sendOfflineSignal();
+  }
+});
+window.addEventListener("pagehide", sendOfflineSignal);
+
 function startPresenceHeartbeat() {
+  if (presenceIntervalId) clearInterval(presenceIntervalId);
   sendHeartbeat();
-  setInterval(sendHeartbeat, PRESENCE_HEARTBEAT_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      sendHeartbeat();
-    } else {
-      sendOfflineSignal();
-    }
-  });
-  window.addEventListener("pagehide", sendOfflineSignal);
+  presenceIntervalId = setInterval(sendHeartbeat, PRESENCE_HEARTBEAT_MS);
 }
 
 function listenMessages() {
+  if (unsubMessages) unsubMessages();
   const q = query(
     collection(db, ...wsPath("chats", currentUser.uid, "messages")),
     orderBy("timestamp", "asc")
   );
-  onSnapshot(q, (snap) => {
+  unsubMessages = onSnapshot(q, (snap) => {
     messagesEl.innerHTML = "";
     let latestAdminInfo = null;
     let lastDate = null;
@@ -346,9 +388,10 @@ async function touchCustomerDoc(lastMessage, searchableText) {
 // tidak menulis ke Firestore di setiap ketukan tombol).
 let typingDebounceTimer = null;
 function updateTypingDraft(text) {
-  if (!currentUser) return;
+  if (!currentUser || !sessionActive) return;
   clearTimeout(typingDebounceTimer);
   typingDebounceTimer = setTimeout(() => {
+    if (!currentUser || !sessionActive) return;
     setDoc(
       doc(db, ...wsPath("customers", currentUser.uid)),
       { typingDraft: text.trim() ? text : null },
@@ -364,7 +407,7 @@ messageInput.addEventListener("input", () => {
 messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
-  if (!text || !currentUser) return;
+  if (!text || !currentUser || !sessionActive) return;
   messageInput.value = "";
 
   try {
@@ -395,7 +438,7 @@ messageForm.addEventListener("submit", async (e) => {
 imageInput.addEventListener("change", async () => {
   const file = imageInput.files[0];
   imageInput.value = "";
-  if (!file || !currentUser) return;
+  if (!file || !currentUser || !sessionActive) return;
 
   try {
     const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
