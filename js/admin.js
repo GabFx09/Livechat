@@ -17,7 +17,8 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
@@ -484,9 +485,14 @@ function listenCustomers() {
   });
 }
 
-function matchesSearch(name) {
+function matchesSearch(data) {
   if (!searchQuery) return true;
-  return (name || "").toLowerCase().includes(searchQuery.toLowerCase());
+  const q = searchQuery.toLowerCase();
+  if ((data.name || "").toLowerCase().includes(q)) return true;
+  if (Array.isArray(data.searchText)) {
+    return data.searchText.some((t) => (t || "").toLowerCase().includes(q));
+  }
+  return false;
 }
 
 function getVisibleCustomerEntries() {
@@ -495,7 +501,7 @@ function getVisibleCustomerEntries() {
     const isArchived = !!data.archived;
     if (currentListView === "archived" && !isArchived) return;
     if (currentListView === "active" && isArchived) return;
-    if (!matchesSearch(data.name)) return;
+    if (!matchesSearch(data)) return;
     entries.push({ uid, name: data.name });
   });
   return entries;
@@ -541,7 +547,7 @@ function renderCustomerList() {
     const isArchived = !!data.archived;
     if (currentListView === "archived" && !isArchived) return;
     if (currentListView === "active" && isArchived) return;
-    if (!matchesSearch(data.name)) return;
+    if (!matchesSearch(data)) return;
 
     const unreadCount = isArchived ? 0 : data.unreadCount || 0;
     const waiting = unreadCount > 0;
@@ -829,20 +835,20 @@ function openCustomer(uid, name) {
   });
 }
 
-async function touchCustomerDoc(lastMessage) {
-  await setDoc(
-    doc(db, ...wsPath("customers", activeCustomerUid)),
-    {
-      lastMessage,
-      lastMessageAt: serverTimestamp(),
-      lastSender: "admin",
-      unreadCount: 0,
-      archived: false,
-      archivedAt: null,
-      expireAt: null
-    },
-    { merge: true }
-  );
+async function touchCustomerDoc(lastMessage, searchableText) {
+  const update = {
+    lastMessage,
+    lastMessageAt: serverTimestamp(),
+    lastSender: "admin",
+    unreadCount: 0,
+    archived: false,
+    archivedAt: null,
+    expireAt: null
+  };
+  if (searchableText) {
+    update.searchText = arrayUnion(searchableText);
+  }
+  await setDoc(doc(db, ...wsPath("customers", activeCustomerUid)), update, { merge: true });
 }
 
 messageForm.addEventListener("submit", async (e) => {
@@ -861,7 +867,7 @@ messageForm.addEventListener("submit", async (e) => {
       senderPhoto: currentAdmin.photo || null,
       timestamp: serverTimestamp()
     });
-    await touchCustomerDoc(text);
+    await touchCustomerDoc(text, text);
   } catch (err) {
     alert("Gagal mengirim balasan: " + err.message);
   }

@@ -15,7 +15,8 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
-  increment
+  increment,
+  arrayUnion
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
@@ -261,22 +262,22 @@ function listenMessages() {
   });
 }
 
-async function touchCustomerDoc(lastMessage) {
-  await setDoc(
-    doc(db, ...wsPath("customers", currentUser.uid)),
-    {
-      name: currentUser.name,
-      lastMessage,
-      lastMessageAt: serverTimestamp(),
-      lastSender: "customer",
-      unreadCount: increment(1),
-      archived: false,
-      archivedAt: null,
-      expireAt: null,
-      typingDraft: null
-    },
-    { merge: true }
-  );
+async function touchCustomerDoc(lastMessage, searchableText) {
+  const update = {
+    name: currentUser.name,
+    lastMessage,
+    lastMessageAt: serverTimestamp(),
+    lastSender: "customer",
+    unreadCount: increment(1),
+    archived: false,
+    archivedAt: null,
+    expireAt: null,
+    typingDraft: null
+  };
+  if (searchableText) {
+    update.searchText = arrayUnion(searchableText);
+  }
+  await setDoc(doc(db, ...wsPath("customers", currentUser.uid)), update, { merge: true });
 }
 
 // Kirim draf ketikan customer ke admin secara real-time (di-debounce supaya
@@ -318,7 +319,7 @@ messageForm.addEventListener("submit", async (e) => {
   }
 
   try {
-    await touchCustomerDoc(text);
+    await touchCustomerDoc(text, text);
   } catch (err) {
     console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
     alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
