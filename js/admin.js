@@ -104,12 +104,12 @@ const railUnreadBadge = document.getElementById("rail-unread-badge");
 const customerSearchInput = document.getElementById("customer-search-input");
 
 const settingsBtn = document.getElementById("settings-btn");
-const settingsOverlay = document.getElementById("settings-overlay");
+const settingsView = document.getElementById("settings-view");
+const settingsBackBtn = document.getElementById("settings-back-btn");
 const avatarPreview = document.getElementById("avatar-preview");
 const photoInput = document.getElementById("photo-input");
 const displayNameInput = document.getElementById("display-name-input");
 const settingsSaveBtn = document.getElementById("settings-save-btn");
-const settingsCancelBtn = document.getElementById("settings-cancel-btn");
 const settingsError = document.getElementById("settings-error");
 const settingsLogoutBtn = document.getElementById("settings-logout-btn");
 
@@ -197,7 +197,7 @@ document.addEventListener("keydown", (e) => {
   if (!currentAdmin) return;
   if (!e.altKey) return;
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-  if (!settingsOverlay.classList.contains("hidden")) return;
+  if (!settingsView.classList.contains("hidden")) return;
 
   const entries = getVisibleCustomerEntries();
   if (entries.length === 0) return;
@@ -234,7 +234,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !statsView.classList.contains("hidden")) {
     navigateTo("open");
   }
-  if (e.key === "Escape" && !settingsOverlay.classList.contains("hidden")) {
+  if (e.key === "Escape" && !settingsView.classList.contains("hidden")) {
     navigateTo("open");
   }
 });
@@ -1134,7 +1134,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   tabAllBtn.classList.remove("active");
   tabArchivedBtn.classList.remove("active");
   railUnreadBadge.classList.add("hidden");
-  settingsOverlay.classList.add("hidden");
+  settingsView.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
   statsView.classList.add("hidden");
   customerPanel.classList.add("hidden");
@@ -1176,11 +1176,10 @@ function applyRoute() {
   if (!currentAdmin) return;
 
   const route = window.location.hash.replace(/^#\/?/, "") || "open";
-  settingsOverlay.classList.add("hidden");
+  settingsView.classList.add("hidden");
   statsView.classList.add("hidden");
 
   if (route === "settings") {
-    appScreen.classList.remove("hidden");
     openSettingsModal();
     return;
   }
@@ -1219,6 +1218,7 @@ function showSettingsTab(tab) {
 }
 
 function openSettingsModal() {
+  appScreen.classList.add("hidden");
   pendingPhotoDataUrl = null;
   displayNameInput.value = currentAdmin.name !== currentAdmin.email ? currentAdmin.name : "";
   renderAvatar(avatarPreview, currentAdmin.photo, currentAdmin.name);
@@ -1231,7 +1231,7 @@ function openSettingsModal() {
   appearanceError.classList.add("hidden");
 
   showSettingsTab("profile");
-  settingsOverlay.classList.remove("hidden");
+  settingsView.classList.remove("hidden");
 }
 
 settingsBtn.addEventListener("click", () => {
@@ -1241,7 +1241,7 @@ settingsBtn.addEventListener("click", () => {
 settingsTabProfileBtn.addEventListener("click", () => showSettingsTab("profile"));
 settingsTabAppearanceBtn.addEventListener("click", () => showSettingsTab("appearance"));
 
-settingsCancelBtn.addEventListener("click", () => navigateTo("open"));
+settingsBackBtn.addEventListener("click", () => navigateTo("open"));
 
 appearanceColorInput.addEventListener("input", () => {
   appearanceColorText.value = appearanceColorInput.value;

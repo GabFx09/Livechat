@@ -87,10 +87,13 @@
     </aside>
   </section>
 
-  <div id="settings-overlay" class="modal-overlay hidden">
-    <div class="modal-card settings-card">
-      <h2>Pengaturan</h2>
+  <section id="settings-view" class="screen hidden">
+    <header id="settings-view-header">
+      <button id="settings-back-btn" type="button" class="header-icon-btn" title="Kembali">←</button>
+      <span>Pengaturan</span>
+    </header>
 
+    <div id="settings-view-body">
       <div class="settings-tabs">
         <button id="settings-tab-profile-btn" type="button" class="settings-tab active">Profil</button>
         <button id="settings-tab-appearance-btn" type="button" class="settings-tab">Appearance</button>
@@ -102,6 +105,7 @@
         </div>
         <label class="file-btn" for="photo-input">Ganti foto profil</label>
         <input id="photo-input" type="file" accept="image/*" class="hidden" />
+        <label class="auth-label" for="display-name-input">Nama Tampilan</label>
         <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
         <button id="settings-save-btn" type="button">Simpan Profil</button>
         <p id="settings-error" class="error hidden"></p>
@@ -122,12 +126,9 @@
         <p id="appearance-error" class="error hidden"></p>
       </div>
 
-      <div class="settings-footer">
-        <button id="settings-cancel-btn" type="button" class="btn-secondary">Tutup</button>
-        <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
-      </div>
+      <button id="settings-logout-btn" type="button" class="btn-logout">Keluar</button>
     </div>
-  </div>
+  </section>
 
   <div id="saved-replies-overlay" class="modal-overlay hidden">
     <div class="modal-card saved-replies-card">
