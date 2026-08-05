@@ -826,6 +826,22 @@ html, body {
   white-space: pre-wrap;
 }
 
+.typing-preview {
+  padding: 8px 20px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-style: italic;
+  border-top: 1px solid var(--border);
+  background: var(--panel-alt);
+  word-break: break-word;
+}
+
+.typing-preview strong {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 600;
+}
+
 .msg-time {
   display: block;
   margin-top: 4px;

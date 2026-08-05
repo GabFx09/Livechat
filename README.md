@@ -147,6 +147,7 @@ Cara kerjanya:
 - **Info customer (admin saja)**: klik ℹ di header chat → panel kanan berisi nama, IP, kota, provinsi, negara (diambil otomatis dari [ipapi.co](https://ipapi.co)/ipwho.is, tidak terlihat customer).
 - **Saved Replies**: tekan **Ctrl+/** (atau klik ⚡ di sebelah kolom pesan) untuk buka daftar balasan cepat tersimpan, bisa tambah/hapus sendiri. Mengetik 3+ huruf yang cocok dengan salah satu saved reply juga langsung memunculkan saran di atas kolom pesan (navigasi dengan panah atas/bawah, pilih dengan Enter/klik).
 - **Navigasi keyboard**: **Alt + panah atas/bawah** untuk pindah antar chat customer tanpa klik mouse.
+- **Live typing preview (admin saja)**: saat customer sedang mengetik, admin bisa lihat draf ketikannya secara real-time (bukan cuma indikator "sedang mengetik") di atas kolom balas. Draf otomatis hilang begitu customer kirim pesan atau menghapus semua ketikannya. Catatan: ini fitur umum di tool livechat (LiveChat, Intercom, dll), tapi berarti admin melihat teks sebelum customer sempat membatalkan/menghapusnya — pertimbangkan untuk diinformasikan ke customer kalau relevan untuk kebijakan privasi Anda.
 
 ## Catatan keamanan & isolasi data antar perusahaan
 

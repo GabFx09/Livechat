@@ -54,6 +54,7 @@ const sidebarAvatarEl = document.getElementById("sidebar-avatar");
 const logoutBtn = document.getElementById("logout-btn");
 const customerListEl = document.getElementById("customer-list");
 const messagesEl = document.getElementById("messages");
+const typingPreviewEl = document.getElementById("typing-preview");
 const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
@@ -472,6 +473,7 @@ function listenCustomers() {
 
     renderCustomerList();
     updateRailBadge();
+    updateTypingPreview();
     checkAutoArchive();
 
     if (activeCustomerUid && customersDataMap.has(activeCustomerUid)) {
@@ -489,6 +491,24 @@ function getVisibleCustomerEntries() {
     entries.push({ uid, name: data.name });
   });
   return entries;
+}
+
+function updateTypingPreview() {
+  const data = activeCustomerUid ? customersDataMap.get(activeCustomerUid) : null;
+  const draft = data && data.typingDraft;
+
+  if (!draft) {
+    typingPreviewEl.classList.add("hidden");
+    typingPreviewEl.innerHTML = "";
+    return;
+  }
+
+  typingPreviewEl.innerHTML = "";
+  const label = document.createElement("strong");
+  label.textContent = "Sedang mengetik: ";
+  typingPreviewEl.appendChild(label);
+  typingPreviewEl.appendChild(document.createTextNode(draft));
+  typingPreviewEl.classList.remove("hidden");
 }
 
 function updateRailBadge() {
@@ -759,6 +779,7 @@ function openCustomer(uid, name) {
   }
 
   renderCustomerList();
+  updateTypingPreview();
 
   if (unsubMessages) unsubMessages();
 

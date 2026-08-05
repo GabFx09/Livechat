@@ -249,11 +249,31 @@ async function touchCustomerDoc(lastMessage) {
       unreadCount: increment(1),
       archived: false,
       archivedAt: null,
-      expireAt: null
+      expireAt: null,
+      typingDraft: null
     },
     { merge: true }
   );
 }
+
+// Kirim draf ketikan customer ke admin secara real-time (di-debounce supaya
+// tidak menulis ke Firestore di setiap ketukan tombol).
+let typingDebounceTimer = null;
+function updateTypingDraft(text) {
+  if (!currentUser) return;
+  clearTimeout(typingDebounceTimer);
+  typingDebounceTimer = setTimeout(() => {
+    setDoc(
+      doc(db, ...wsPath("customers", currentUser.uid)),
+      { typingDraft: text.trim() ? text : null },
+      { merge: true }
+    ).catch(() => {});
+  }, 400);
+}
+
+messageInput.addEventListener("input", () => {
+  updateTypingDraft(messageInput.value);
+});
 
 messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
