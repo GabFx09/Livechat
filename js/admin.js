@@ -1439,9 +1439,9 @@ messageForm.addEventListener("submit", async (e) => {
   }
 });
 
-imageInput.addEventListener("change", async () => {
-  const file = imageInput.files[0];
-  imageInput.value = "";
+// Dipakai baik oleh input file (klik ikon 🖼️) maupun paste screenshot
+// (Ctrl+V) langsung di kolom balas -- lihat listener "paste" di bawah.
+async function sendImageFile(file) {
   if (!file || !activeCustomerUid) return;
 
   try {
@@ -1462,6 +1462,27 @@ imageInput.addEventListener("change", async () => {
   } catch (err) {
     alert(err.message || "Gagal mengirim gambar.");
   }
+}
+
+imageInput.addEventListener("change", async () => {
+  const file = imageInput.files[0];
+  imageInput.value = "";
+  await sendImageFile(file);
+});
+
+// Ctrl+V screenshot/gambar langsung di kolom balas -- tidak perlu klik ikon
+// 🖼️ dulu. clipboardData.items cuma keisi kalau clipboard-nya beneran ada
+// gambar (mis. hasil screenshot), jadi paste teks biasa tetap jalan normal.
+messageInput.addEventListener("paste", (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+
+  const imageItem = Array.from(items).find((item) => item.type.startsWith("image/"));
+  if (!imageItem) return;
+
+  e.preventDefault();
+  const file = imageItem.getAsFile();
+  if (file) sendImageFile(file);
 });
 
 // Cari workspace tempat uid ini terdaftar sebagai admin, lewat penunjuk
