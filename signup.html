@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daftar Workspace Baru - LiveChat</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <section id="signup-screen" class="screen">
+    <div class="auth-layout">
+      <div class="auth-brand">
+        <div class="auth-brand-icon">🛠</div>
+        <h1>Daftar Workspace Baru</h1>
+        <p>Bikin akun admin & workspace livechat sendiri. Butuh kode undangan dari penyedia platform ini -- hubungi mereka kalau belum punya.</p>
+      </div>
+      <div class="auth-form-panel">
+        <div class="auth-form-card">
+          <h2>Buat Akun</h2>
+          <p class="auth-subtitle">Semua field wajib diisi.</p>
+
+          <label class="auth-label" for="invite-code-input">Kode Undangan</label>
+          <input id="invite-code-input" type="text" placeholder="mis. TOKOABC2026" autocomplete="off" />
+
+          <label class="auth-label" for="company-name-input">Nama Perusahaan</label>
+          <input id="company-name-input" type="text" placeholder="mis. PT Toko ABC" maxlength="60" autocomplete="off" />
+
+          <label class="auth-label" for="admin-name-input">Nama Tampilan Anda</label>
+          <input id="admin-name-input" type="text" placeholder="mis. Budi (Admin)" maxlength="40" autocomplete="name" />
+
+          <label class="auth-label" for="signup-email-input">Email</label>
+          <input id="signup-email-input" type="email" placeholder="admin@perusahaan.com" autocomplete="username" />
+
+          <label class="auth-label" for="signup-password-input">Password</label>
+          <input id="signup-password-input" type="password" placeholder="Minimal 6 karakter" autocomplete="new-password" />
+
+          <button id="signup-btn">Daftar & Buat Workspace</button>
+          <p id="signup-error" class="error hidden"></p>
+          <p id="signup-success" class="hidden" style="color: var(--online); font-size: 0.85rem; margin-top: 10px;">
+            Berhasil! Mengarahkan ke dashboard admin...
+          </p>
+
+          <p class="auth-subtitle" style="margin: 18px 0 0;">
+            Sudah punya akun? <a href="admin.html" style="color: var(--accent);">Masuk di sini</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="js/signup.js"></script>
+</body>
+</html>

@@ -10,7 +10,7 @@ Situs ini murni HTML/CSS/JS statis (tanpa proses build), sehingga bisa di-hostin
 
 Live: https://gabfx09.github.io/Livechat/ dan https://gabfx09.github.io/Livechat/admin.html
 
-**Pemilik platform** (Anda) yang menambahkan tiap perusahaan baru secara manual lewat Firebase Console (lihat langkah 4) — belum ada halaman signup mandiri.
+**Pemilik platform** (Anda) yang mengontrol siapa boleh gabung: tambahkan perusahaan baru manual lewat Firebase Console (langkah 4a-4c), atau bagikan kode undangan sekali-pakai supaya mereka daftar sendiri lewat `signup.html` (langkah 4e) — dua-duanya menghasilkan workspace yang sama persis.
 
 ## 1. Buat project Firebase
 
@@ -85,6 +85,23 @@ Ulangi 4b + 4c kalau perusahaan itu mau lebih dari 1 admin (tiap admin dapat use
   - Bersih: `https://gabfx09.github.io/Livechat/WORKSPACE_ID/`
   - Atau: `https://gabfx09.github.io/Livechat/?w=WORKSPACE_ID`
 - **Snippet widget** untuk ditempel di website mereka — lihat bagian "Widget untuk website perusahaan" di bawah.
+
+### 4e. Alternatif: signup mandiri pakai kode undangan (tidak perlu 4a-4c manual)
+
+Ada juga `signup.html` — perusahaan baru bisa bikin akun admin + workspace-nya **sendiri**, asal punya kode undangan yang Anda buat dulu. Cocok kalau tidak mau bolak-balik Firebase Console tiap ada perusahaan baru, tapi tetap mau kontrol siapa yang boleh gabung (bukan signup terbuka bebas).
+
+1. **Bikin kode undangan** — **Firestore Database > Data** → **Start collection** (atau masuk ke collection `inviteCodes` yang sudah ada) → Collection ID: `inviteCodes` → Document ID: **ketik kode bebas yang mudah dibagikan**, mis. `TOKOABC2026` (jangan Auto-ID, supaya kodenya gampang diketik ulang oleh penerima) → tambahkan field:
+   - `used` (boolean) = `false`
+   - `usedByUid` (null)
+   - `usedAt` (null)
+   - `claimedWorkspaceId` (null)
+
+   Klik **Save**. Kode ini sekali pakai — begitu ada yang signup pakai kode ini, otomatis terkunci (`used` jadi `true`) dan tidak bisa dipakai lagi buat bikin workspace lain.
+
+2. **Bagikan** kode itu + link `https://gabfx09.github.io/Livechat/signup.html` ke perusahaan yang bersangkutan.
+3. Mereka isi form (kode undangan, nama perusahaan, nama tampilan admin, email, password) → klik **Daftar & Buat Workspace** → otomatis dapat akun admin + workspace baru, langsung diarahkan ke `admin.html`. Hasilnya identik dengan yang dibuat manual lewat 4a-4c (workspace ID di-generate otomatis, bisa dilihat lewat Firestore Console kalau perlu link chat/widget-nya).
+
+**Kalau signup gagal di tengah jalan** (mis. koneksi putus setelah kode terpakai tapi sebelum workspace-nya lengkap terbentuk) — app ini statis tanpa backend jadi tidak ada rollback otomatis. Kode itu jadi "terbakar" percuma; solusinya buat kode undangan baru, atau reset manual field `used`/`usedByUid`/`usedAt`/`claimedWorkspaceId` dokumen kode itu balik ke kondisi awal (`false`/`null`) lewat Firestore Console kalau workspace setengah-jadinya juga sudah dibersihkan manual.
 
 ## 5. Coba jalankan secara lokal (opsional tapi disarankan)
 
@@ -171,6 +188,7 @@ Cara kerjanya:
 - **Dashboard Statistik**: klik ikon 📊 di rail kiri untuk lihat jumlah pesan hari ini (dengan perbandingan naik/turun dari kemarin), jumlah customer baru hari ini, dan grafik batang jumlah pesan 30 hari terakhir. Datanya dari counter harian (`stats/{YYYY-MM-DD}`) yang otomatis bertambah tiap ada pesan terkirim — jadi cuma menghitung aktivitas **sejak fitur ini dirilis**, histori sebelumnya tidak ikut terhitung.
 - **Link per menu**: tiap menu di rail kiri admin punya URL sendiri lewat hash (`#/open`, `#/all`, `#/archived`, `#/stats`, `#/settings`) — mis. `admin.html#/settings` langsung membuka panel Pengaturan, `admin.html#/stats` langsung membuka Statistik. Bisa di-refresh/bookmark/share, dan tombol back/forward browser juga berfungsi untuk pindah antar menu.
 - **Live typing preview (admin saja)**: saat customer sedang mengetik, admin bisa lihat draf ketikannya secara real-time (bukan cuma indikator "sedang mengetik") di atas kolom balas. Draf otomatis hilang begitu customer kirim pesan atau menghapus semua ketikannya. Catatan: ini fitur umum di tool livechat (LiveChat, Intercom, dll), tapi berarti admin melihat teks sebelum customer sempat membatalkan/menghapusnya — pertimbangkan untuk diinformasikan ke customer kalau relevan untuk kebijakan privasi Anda.
+- **Signup mandiri pakai kode undangan** (`signup.html`): alternatif buat langkah 4a-4c yang manual — perusahaan baru bikin akun admin + workspace sendiri asal punya kode undangan sekali-pakai yang Anda buat dulu lewat Firestore Console. Lihat langkah 4e di atas untuk cara bikin kodenya.
 
 ## Testing
 
@@ -191,7 +209,7 @@ Fungsi-fungsi logika murni (tidak nyentuh DOM/Firebase) dipisah ke modul sendiri
 npm run test:rules
 ```
 
-Menjalankan `firestore.rules` lewat Firestore Emulator (auto-start via `firebase emulators:exec`) dan memverifikasi 36 skenario: isolasi antar workspace, siapa boleh baca/tulis/hapus apa, rate limit anti-spam, batas panjang pesan, dan yang paling penting — semua rule anti-spoofing berbasis `get()`/`exists()` buat sapaan/menu pilihan/balasan otomatis (memastikan customer tidak bisa menyamar jadi "admin" dengan teks bebas).
+Menjalankan `firestore.rules` lewat Firestore Emulator (auto-start via `firebase emulators:exec`) dan memverifikasi 50 skenario di 2 file: `test/rules/firestore.rules.test.js` (isolasi antar workspace, siapa boleh baca/tulis/hapus apa, rate limit anti-spam, batas panjang pesan, semua rule anti-spoofing berbasis `get()`/`exists()` buat sapaan/menu pilihan/balasan otomatis) dan `test/rules/signup.rules.test.js` (alur signup mandiri pakai kode undangan -- lihat langkah 4e di atas -- termasuk anti reuse kode & anti pembajakan workspace orang lain).
 
 **Butuh Java Runtime** (dipakai Firestore Emulator, bukan bagian dari app-nya sendiri). Kalau belum ada:
 ```powershell

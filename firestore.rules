@@ -2,24 +2,79 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // inviteCodes/{code} = kode undangan buat signup mandiri workspace baru
+    // (Pengaturan > lihat halaman signup.html). Dokumennya sendiri dibuat
+    // manual oleh pemilik platform lewat Console (Document ID = kode itu
+    // sendiri, mis. "TOKOABC2026"), field awal { used: false,
+    // claimedWorkspaceId: null }. Satu-satunya perubahan yang diizinkan:
+    // dari belum dipakai jadi dipakai DAN langsung terikat ke SATU
+    // workspaceId tertentu, dalam satu write atomik (compare-and-swap ke
+    // satu dokumen, jadi tidak ada celah race/klaim-dulu-ikat-belakangan
+    // yang bisa dipakai berulang buat bikin banyak workspace dari 1 kode).
+    match /inviteCodes/{code} {
+      allow read: if false;
+      allow create: if false;
+      allow update: if request.auth != null &&
+        resource.data.used == false &&
+        resource.data.claimedWorkspaceId == null &&
+        request.resource.data.used == true &&
+        request.resource.data.usedByUid == request.auth.uid &&
+        request.resource.data.claimedWorkspaceId is string &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['used', 'usedByUid', 'usedAt', 'claimedWorkspaceId']
+        );
+      allow delete: if false;
+    }
+
+    // Dipakai adminIndex & workspaces/{id}/admins di bawah -- cek apakah
+    // workspaceId ini memang baru dibuat lewat kode undangan yang diklaim
+    // oleh uid yang sedang request sekarang.
+    function workspaceClaimedBySelf(workspaceId) {
+      let ws = get(/databases/$(database)/documents/workspaces/$(workspaceId));
+      let code = get(/databases/$(database)/documents/inviteCodes/$(ws.data.signupInviteCode));
+      return code.data.usedByUid == request.auth.uid;
+    }
+
     // adminIndex/{uid} = penunjuk cepat "admin ini kerja di workspace mana".
-    // Dibuat manual oleh pemilik platform lewat Firebase Console saat
-    // membuat admin baru, tidak bisa dibuat/diubah dari aplikasi client.
+    // Dibuat manual oleh pemilik platform lewat Firebase Console untuk admin
+    // yang dionboarding manual, ATAU otomatis oleh signup.html untuk admin
+    // yang daftar mandiri pakai kode undangan (lihat workspaceClaimedBySelf
+    // di atas) -- kedua jalur berakhir di bentuk dokumen yang sama.
+    // Setelah dibuat tidak bisa diubah lagi lewat jalur mana pun.
     match /adminIndex/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
+
+      allow create: if request.auth != null &&
+        request.auth.uid == uid &&
+        request.resource.data.keys().hasOnly(['workspaceId']) &&
+        workspaceClaimedBySelf(request.resource.data.workspaceId);
+
+      allow update: if false;
+      allow delete: if false;
     }
 
     // workspaces/{workspaceId} = 1 dokumen per perusahaan (nama, brandName,
-    // themeColor, bubbleIcon, dst). Dokumennya sendiri dibuat manual oleh
-    // pemilik platform, tapi field appearance (brandName/themeColor/bubbleIcon)
-    // dan sapaan otomatis (autoGreetingEnabled/autoGreetingMessage) boleh
-    // diedit admin workspace tsb lewat menu Pengaturan > Appearance/Auto-Chat.
-    // Read dibuka publik (tanpa perlu login) supaya widget.js di website
+    // themeColor, bubbleIcon, dst). Dokumennya bisa dibuat manual oleh
+    // pemilik platform lewat Console (onboarding lama), ATAU otomatis lewat
+    // signup.html kalau disertai kode undangan yang valid & sudah diklaim
+    // uid ybs (lihat inviteCodes & workspaceClaimedBySelf di atas) --
+    // signupInviteCode ikut tersimpan permanen di dokumennya sebagai jejak
+    // "workspace ini dibuat lewat kode yang mana", dipakai rule admins &
+    // adminIndex buat verifikasi ulang. Field appearance
+    // (brandName/themeColor/bubbleIcon) dan sapaan otomatis
+    // (autoGreetingEnabled/autoGreetingMessage) boleh diedit admin
+    // workspace tsb lewat menu Pengaturan > Appearance/Auto-Chat. Read
+    // dibuka publik (tanpa perlu login) supaya widget.js di website
     // perusahaan bisa ambil branding-nya tanpa proses auth dulu.
     match /workspaces/{workspaceId} {
       allow read: if true;
-      allow create: if false;
+
+      allow create: if request.auth != null &&
+        request.resource.data.keys().hasOnly(['name', 'brandName', 'themeColor', 'bubbleIcon', 'signupInviteCode']) &&
+        request.resource.data.signupInviteCode is string &&
+        get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.signupInviteCode)).data.usedByUid == request.auth.uid &&
+        get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.signupInviteCode)).data.claimedWorkspaceId == workspaceId;
+
       allow delete: if false;
 
       function isWorkspaceAdmin() {
@@ -46,12 +101,18 @@ service cloud.firestore {
            'businessHoursDays', 'businessHoursStart', 'businessHoursEnd', 'offlineMessage']
         );
 
-      // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa
-      // dibuat dari aplikasi client. Admin yang bersangkutan boleh
-      // mengubah profilnya sendiri (nama tampilan, foto).
+      // Dokumen admin dibuat manual lewat Firebase Console (onboarding lama),
+      // ATAU otomatis oleh signup.html buat diri sendiri di workspace yang
+      // baru saja dibuatnya sendiri lewat kode undangan (workspaceClaimedBySelf
+      // di atas). Admin yang bersangkutan boleh mengubah profilnya sendiri
+      // (nama tampilan, foto) kapan pun setelahnya.
       match /admins/{adminId} {
         allow read: if request.auth != null && request.auth.uid == adminId;
-        allow create: if false;
+
+        allow create: if request.auth != null &&
+          request.auth.uid == adminId &&
+          workspaceClaimedBySelf(workspaceId);
+
         allow update: if request.auth != null && request.auth.uid == adminId;
         allow delete: if false;
 
