@@ -409,6 +409,19 @@ async function touchCustomerDoc(lastMessage, searchableText) {
   await setDoc(doc(db, ...wsPath("customers", currentUser.uid)), update, { merge: true });
 }
 
+// Pesan auto-greeting/menu-pilihan/balasan-otomatis ditulis langsung ke
+// chats/.../messages (bukan lewat touchCustomerDoc), jadi tanpa ini isinya
+// tidak pernah kecatat ke searchText -> admin nyari kata yang cuma ada di
+// pesan bot (mis. "Selamat" dari sapaan) hasilnya kosong terus.
+function indexSearchText(text) {
+  if (!text || !currentUser) return;
+  setDoc(
+    doc(db, ...wsPath("customers", currentUser.uid)),
+    { searchText: arrayUnion(text) },
+    { merge: true }
+  ).catch(() => {});
+}
+
 // Kirim draf ketikan customer ke admin secara real-time (di-debounce supaya
 // tidak menulis ke Firestore di setiap ketukan tombol).
 let typingDebounceTimer = null;
@@ -480,6 +493,7 @@ async function selectOption(opt) {
       autoReply: true,
       timestamp: serverTimestamp()
     }).catch(() => {});
+    indexSearchText(reply);
   }, 800);
 }
 
@@ -550,6 +564,7 @@ startBtn.addEventListener("click", async () => {
           timestamp: serverTimestamp(),
           autoGreeting: true
         }).catch(() => {});
+        indexSearchText(autoGreetingMessage);
       }
 
       // Menyusul sapaan dengan jeda singkat (kesan "bot lagi ngetik"),
