@@ -18,13 +18,29 @@ import {
   increment,
   arrayUnion
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import {
+  initializeAppCheck,
+  ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
+import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Lewati App Check kalau site key belum di-setup admin (lihat
+// firebase-config.js) -- app tetap jalan normal, cuma tanpa proteksi
+// anti-bot tambahan itu.
+if (RECAPTCHA_V3_SITE_KEY && !RECAPTCHA_V3_SITE_KEY.startsWith("PASTE_")) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
+    isTokenAutoRefreshEnabled: true
+  });
+} else {
+  console.warn("Firebase App Check belum di-setup (RECAPTCHA_V3_SITE_KEY masih placeholder). Lihat README.md.");
+}
 
 // Terima workspace ID dari query string (?w=ID) ATAU dari URL bersih
 // (/Livechat/ID/, dilayani lewat trik 404.html karena GitHub Pages tidak
@@ -57,6 +73,7 @@ const workspaceErrorScreen = document.getElementById("workspace-error-screen");
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const nameInput = document.getElementById("name-input");
+const hpCheckInput = document.getElementById("hp-check");
 const startBtn = document.getElementById("start-btn");
 const startError = document.getElementById("start-error");
 const chatHeader = document.getElementById("chat-header");
@@ -527,6 +544,12 @@ imageInput.addEventListener("change", async () => {
 });
 
 startBtn.addEventListener("click", async () => {
+  // Honeypot: field ini disembunyikan lewat CSS (bukan hidden), jadi
+  // pengguna asli tidak mungkin ngisi. Kalau kesisi, diam-diam berhenti di
+  // sini tanpa pesan error apa pun -- bot auto-fill biasanya tidak
+  // membedakan ini dari field beneran.
+  if (hpCheckInput && hpCheckInput.value) return;
+
   const name = nameInput.value.trim();
   if (!name) {
     showStartError("Username tidak boleh kosong.");

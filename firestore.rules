@@ -27,6 +27,18 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/workspaces/$(workspaceId)/admins/$(request.auth.uid));
       }
 
+      // Anti-spam ringan buat pesan customer (lihat pemakaiannya di
+      // chats/{customerId}/messages di bawah): tolak kalau belum 500ms
+      // sejak pesan sebelumnya dari customer yg sama. Tidak kerasa buat
+      // orang beneran yg ngetik manual, tapi cukup nahan script yg nembak
+      // banyak pesan per detik.
+      function customerNotSpamming(customerId) {
+        let cust = get(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId));
+        return !('lastMessageAt' in cust.data) ||
+          cust.data.lastMessageAt == null ||
+          request.time > cust.data.lastMessageAt + duration.value(500, 'ms');
+      }
+
       allow update: if isWorkspaceAdmin() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage',
@@ -68,15 +80,18 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == customerId;
         allow read: if isWorkspaceAdmin();
 
-        // exists(...) di baris terakhir menolak kiriman kalau dokumen
-        // customers/{customerId}-nya sudah dihapus admin (fitur "Hapus
-        // Semua Chat") -- customer wajib mulai sesi baru dulu (yang bikin
-        // ulang dokumennya) sebelum bisa kirim pesan lagi.
+        // exists(...) menolak kiriman kalau dokumen customers/{customerId}-nya
+        // sudah dihapus admin (fitur "Hapus Semua Chat") -- customer wajib
+        // mulai sesi baru dulu (yang bikin ulang dokumennya) sebelum bisa
+        // kirim pesan lagi. Batas panjang teks & customerNotSpamming() di
+        // atas adalah lapisan anti-spam tambahan.
         allow create: if request.auth != null &&
           request.auth.uid == customerId &&
           request.resource.data.sender == 'customer' &&
           request.resource.data.type in ['text', 'image'] &&
-          exists(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId));
+          (request.resource.data.type != 'text' || request.resource.data.text.size() <= 4000) &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId)) &&
+          customerNotSpamming(customerId);
 
         allow create: if isWorkspaceAdmin() &&
           request.resource.data.sender == 'admin' &&

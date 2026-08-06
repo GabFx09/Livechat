@@ -26,13 +26,26 @@ import {
   where,
   documentId
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import {
+  initializeAppCheck,
+  ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
+import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+if (RECAPTCHA_V3_SITE_KEY && !RECAPTCHA_V3_SITE_KEY.startsWith("PASTE_")) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
+    isTokenAutoRefreshEnabled: true
+  });
+} else {
+  console.warn("Firebase App Check belum di-setup (RECAPTCHA_V3_SITE_KEY masih placeholder). Lihat README.md.");
+}
 
 let currentAdmin = null; // { uid, email, name, photo, workspaceId, workspaceName }
 let activeCustomerUid = null;

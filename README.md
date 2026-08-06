@@ -38,6 +38,16 @@ Di Firebase Console, buka **Authentication** (kategori **Security**) → tab **S
    ```
    Project ID sudah diatur di `.firebaserc`. Kalau tetap mau lewat Firebase Console manual: buka tab **Rules**, hapus isi default, tempel seluruh isi file `firestore.rules`, klik **Publish** — teliti dulu tidak ada baris yang hilang/terpotong sebelum publish.
 
+## 3b. (Opsional tapi disarankan) Aktifkan App Check anti-spam
+
+Tanpa ini, chat customer tetap bisa dipakai script/bot untuk bikin ribuan sesi/pesan palsu (anonymous auth publik). App Check menandai tiap request dengan token dari reCAPTCHA v3 supaya Firestore bisa bedakan browser asli vs script — gratis, tidak perlu Blaze plan.
+
+1. Firebase Console → **Build > App Check**.
+2. Tab **Apps** → pilih Web App yang sudah didaftarkan di langkah 1 → **Register**.
+3. Pilih provider **reCAPTCHA v3** → ikuti langkah untuk generate site key (Firebase yang bikinkan otomatis, atau pakai punya sendiri dari https://www.google.com/recaptcha/admin).
+4. Salin site key-nya ke `RECAPTCHA_V3_SITE_KEY` di `js/firebase-config.js` (gantikan placeholder `PASTE_RECAPTCHA_V3_SITE_KEY_HERE`).
+5. **Jangan langsung nyalain toggle "Enforce"** di App Check untuk Firestore. Biarkan dulu di mode default (monitor-only) beberapa hari, cek tab **Requests** di App Check buat pastikan traffic asli (customer & admin) memang dapat token *verified* — baru nyalain Enforce kalau sudah yakin, supaya tidak keburu ngeblokir pengguna sah gara-gara salah setup.
+
 ## 4. Menambahkan perusahaan baru (workspace)
 
 Tiap kali ada perusahaan baru mau pakai livechat ini, ulangi 4 langkah berikut lewat Firebase Console:
@@ -147,6 +157,7 @@ Cara kerjanya:
   Tombol **Keluar** juga ada di dalam panel Pengaturan ini (bagian bawah).
 - **Kirim gambar**: customer & admin bisa kirim gambar lewat ikon 🖼️, otomatis dikompres & disimpan langsung di Firestore (bukan Firebase Storage, supaya tetap gratis tanpa kartu kredit). Maks. sekitar 700KB per gambar.
 - **Link otomatis jadi bisa diklik**: URL (`https://...` atau `www...`) di isi pesan mana pun otomatis dijadikan link `<a>` yang bisa diklik langsung (buka tab baru), baik dikirim admin maupun customer. Ditangani `js/text-utils.js`, tanpa `innerHTML` sama sekali supaya aman dari XSS.
+- **Proteksi anti-spam/bot**: 3 lapis — (1) [App Check](#3b-opsional-tapi-disarankan-aktifkan-app-check-anti-spam) reCAPTCHA v3 buat filter request dari script; (2) honeypot field tersembunyi di form "Mulai Chat" (customer asli tidak mungkin ngisi, bot auto-fill biasanya iya); (3) Firestore rules nolak pesan customer yang lebih cepat dari 500ms sejak pesan sebelumnya, plus batas 4000 karakter per pesan teks.
 - **Edit & hapus pesan (admin saja)**: arahkan kursor ke pesan balasan admin sendiri untuk lihat ikon ✏ (edit teks) dan 🗑 (hapus). Pesan dari customer tidak bisa diubah admin. Pesan yang diedit diberi label "(diedit)".
 - **Arsip percakapan**: tab **Aktif**/**Arsip** di sidebar (ikon rail kiri: 💬/🗄). Otomatis pindah ke Arsip setelah **30 menit** tanpa pesan baru; admin juga bisa arsipkan/pulihkan manual lewat panel Info Customer. Customer yang diarsipkan lalu kirim pesan lagi otomatis pulih ke Aktif.
 - **Auto-hapus arsip 1 tahun**: perlu setup TTL sekali di Firestore Console (**Firestore Database > TTL** → Create policy → Collection group: `customers`, Timestamp field: `expireAt`). Tanpa ini, data arsip tetap ada di tab Arsip tapi tidak pernah otomatis terhapus.

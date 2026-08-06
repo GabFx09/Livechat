@@ -40,6 +40,7 @@
           <p class="auth-subtitle">Masukkan username Anda untuk terhubung dengan tim kami.</p>
           <label class="auth-label" for="name-input">Username</label>
           <input id="name-input" type="text" placeholder="mis. budi123" maxlength="40" autocomplete="off" />
+          <input id="hp-check" name="hp_check_field" type="text" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
           <button id="start-btn">Mulai Chat</button>
           <p id="start-error" class="error hidden"></p>
         </div>
@@ -55,7 +56,7 @@
       <form id="message-form">
         <label class="attach-btn" for="image-input" title="Kirim gambar">🖼️</label>
         <input id="image-input" type="file" accept="image/*" class="hidden" />
-        <input id="message-input" type="text" placeholder="Tulis pesan..." autocomplete="off" />
+        <input id="message-input" type="text" placeholder="Tulis pesan..." maxlength="4000" autocomplete="off" />
         <button type="submit">Kirim</button>
       </form>
     </div>

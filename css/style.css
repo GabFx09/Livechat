@@ -37,6 +37,20 @@ html, body {
 
 .hidden { display: none !important; }
 
+/* Honeypot anti-bot: disembunyikan lewat CSS (bukan display:none/hidden),
+   karena bot sederhana sering skip field yang jelas-jelas display:none tapi
+   tetap ngisi field yang cuma "keluar layar" begini. Pengguna asli, mata &
+   keyboard-nya tidak akan pernah nemu field ini. */
+.hp-field {
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .screen {
   height: 100%;
   width: 100%;
