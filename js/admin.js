@@ -164,6 +164,7 @@ const historyDetailOverlay = document.getElementById("history-detail-overlay");
 const historyDetailTitle = document.getElementById("history-detail-title");
 const historyDetailMessages = document.getElementById("history-detail-messages");
 const historyDetailCloseBtn = document.getElementById("history-detail-close-btn");
+const historyDetailExportBtn = document.getElementById("history-detail-export-btn");
 
 const hoursEnabledInput = document.getElementById("hours-enabled-input");
 const hoursDayCheckboxes = document.querySelectorAll(".hours-day-checkbox");
@@ -996,6 +997,13 @@ function renderCustomerPanel(data, uid) {
     customerPanelBody.appendChild(row);
   });
 
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.className = "archive-btn";
+  exportBtn.textContent = "Ekspor Chat (.txt)";
+  exportBtn.addEventListener("click", () => exportChatTranscript(uid, data.name, exportBtn));
+  customerPanelBody.appendChild(exportBtn);
+
   const archiveBtn = document.createElement("button");
   archiveBtn.type = "button";
   archiveBtn.className = "archive-btn";
@@ -1067,6 +1075,49 @@ async function deleteAllChat(uid, name) {
     }
   } catch (err) {
     alert("Gagal menghapus chat: " + err.message);
+  }
+}
+
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function safeFileNamePart(text) {
+  return (text || "customer").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "customer";
+}
+
+function messagesToTranscript(customerName, docs) {
+  const lines = [`Riwayat Chat - ${customerName}`, `Diekspor: ${new Date().toLocaleString("id-ID")}`, ""];
+  docs.forEach((docSnap) => {
+    const m = docSnap.data();
+    const who = m.sender === "admin" ? m.senderName || "Admin" : customerName;
+    const when = formatDateWIB(m.timestamp) + " " + formatTimeWIB(m.timestamp);
+    const content =
+      m.type === "image" ? "[Gambar]" : Array.isArray(m.options) ? "[Menu pilihan: " + m.options.join(", ") + "]" : m.text || "";
+    lines.push(`[${when}] ${who}: ${content}`);
+  });
+  return lines.join("\n");
+}
+
+async function exportChatTranscript(uid, name, triggerBtn) {
+  if (triggerBtn) triggerBtn.disabled = true;
+  try {
+    const snap = await getDocs(
+      query(collection(db, ...wsPath("chats", uid, "messages")), orderBy("timestamp", "asc"))
+    );
+    downloadTextFile(`chat-${safeFileNamePart(name)}-${Date.now()}.txt`, messagesToTranscript(name, snap.docs));
+  } catch (err) {
+    alert("Gagal mengekspor chat: " + err.message);
+  } finally {
+    if (triggerBtn) triggerBtn.disabled = false;
   }
 }
 
@@ -1708,10 +1759,15 @@ function renderArchivedMessage(m, customerName) {
   return div;
 }
 
+let historyDetailExportDocs = [];
+let historyDetailExportName = "";
+
 async function openHistoryDetail(logId, customerName) {
   historyDetailTitle.textContent = `Riwayat Chat dengan "${customerName || "?"}"`;
   historyDetailMessages.innerHTML = "";
   historyDetailOverlay.classList.remove("hidden");
+  historyDetailExportDocs = [];
+  historyDetailExportName = customerName || "";
 
   try {
     const q = query(
@@ -1719,6 +1775,7 @@ async function openHistoryDetail(logId, customerName) {
       orderBy("timestamp", "asc")
     );
     const snap = await getDocs(q);
+    historyDetailExportDocs = snap.docs;
 
     if (snap.empty) {
       const empty = document.createElement("p");
@@ -1748,6 +1805,17 @@ async function openHistoryDetail(logId, customerName) {
 
 historyDetailCloseBtn.addEventListener("click", () => {
   historyDetailOverlay.classList.add("hidden");
+});
+
+historyDetailExportBtn.addEventListener("click", () => {
+  if (historyDetailExportDocs.length === 0) {
+    alert("Tidak ada pesan untuk diekspor.");
+    return;
+  }
+  downloadTextFile(
+    `chat-${safeFileNamePart(historyDetailExportName)}-arsip-${Date.now()}.txt`,
+    messagesToTranscript(historyDetailExportName, historyDetailExportDocs)
+  );
 });
 
 historyDetailOverlay.addEventListener("click", (e) => {
