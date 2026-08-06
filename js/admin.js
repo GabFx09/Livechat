@@ -28,6 +28,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
+import { renderTextWithLinks } from "./text-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1091,7 +1092,7 @@ function renderMessage(m, messageId) {
     div.appendChild(optWrap);
   } else {
     const p = document.createElement("p");
-    p.textContent = m.text || "";
+    renderTextWithLinks(p, m.text || "");
     div.appendChild(p);
   }
 
@@ -1576,7 +1577,7 @@ function renderArchivedMessage(m, customerName) {
     div.appendChild(optWrap);
   } else {
     const p = document.createElement("p");
-    p.textContent = m.text || "";
+    renderTextWithLinks(p, m.text || "");
     div.appendChild(p);
   }
 

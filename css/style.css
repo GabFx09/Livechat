@@ -1239,6 +1239,16 @@ button, a, input, textarea {
   white-space: pre-wrap;
 }
 
+.msg-link {
+  color: var(--accent-2);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.msg-link:hover {
+  text-decoration: none;
+}
+
 .option-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -1276,6 +1286,31 @@ button, a, input, textarea {
 
 .option-tag:hover {
   background: transparent;
+}
+
+/* Di sisi customer, tombol pilihan dibikin berjejer ke bawah (list rapi)
+   alih-alih baris pill yang bisa numpuk kalau labelnya panjang/banyak. */
+#chat-screen .option-buttons {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#chat-screen .option-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+#chat-screen .option-btn::after {
+  content: "›";
+  flex-shrink: 0;
+  font-weight: 700;
+  opacity: 0.6;
 }
 
 .typing-preview {
