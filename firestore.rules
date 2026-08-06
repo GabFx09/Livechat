@@ -107,6 +107,21 @@ service cloud.firestore {
         allow delete: if isWorkspaceAdmin();
       }
 
+      // deletionLogs/{logId} = jejak audit tiap kali admin pakai "Hapus Semua
+      // Chat". Dibuat terpisah dari customers/{customerId} karena dokumen itu
+      // sendiri justru ikut terhapus oleh aksi yang sedang dicatat. Log ini
+      // sengaja tidak bisa diubah/dihapus siapa pun (termasuk admin) supaya
+      // riwayatnya tetap bisa dipercaya.
+      match /deletionLogs/{logId} {
+        allow read: if isWorkspaceAdmin();
+
+        allow create: if isWorkspaceAdmin() &&
+          request.resource.data.deletedBy == request.auth.uid;
+
+        allow update: if false;
+        allow delete: if false;
+      }
+
       // stats/{YYYY-MM-DD} = counter harian untuk dashboard statistik admin.
       // Customer & admin sama-sama boleh menambah counter (efek samping wajar
       // dari kirim pesan/mulai chat), tapi cuma admin yang boleh membacanya,

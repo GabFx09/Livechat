@@ -102,6 +102,7 @@
         <a href="#/settings/profile" class="settings-sub-nav-btn active">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
+        <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
       </nav>
 
       <div class="settings-view-body">
@@ -133,6 +134,7 @@
         <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn active">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
+        <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
       </nav>
 
       <div class="settings-view-body">
@@ -165,6 +167,7 @@
         <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn active">Auto-Chat</a>
+        <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
       </nav>
 
       <div class="settings-view-body">
@@ -178,6 +181,30 @@
           <textarea id="autochat-message-input" rows="4" maxlength="500" placeholder="mis. Halo! Selamat datang di Toko ABC, ada yang bisa kami bantu?"></textarea>
           <button id="autochat-save-btn" type="button">Simpan Auto-Chat</button>
           <p id="autochat-error" class="error hidden"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="settings-history-view" class="screen hidden">
+    <header class="settings-view-header">
+      <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
+      <span>Pengaturan</span>
+    </header>
+
+    <div class="settings-view-layout">
+      <nav class="settings-sub-nav">
+        <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
+        <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
+        <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
+        <a href="#/settings/history" class="settings-sub-nav-btn active">Riwayat</a>
+      </nav>
+
+      <div class="settings-view-body">
+        <div class="settings-panel">
+          <p class="settings-hint">Jejak setiap kali chat customer dihapus lewat tombol "Hapus Semua Chat" di panel Info Customer.</p>
+          <ul id="history-log-list" class="history-log-list"></ul>
+          <p id="history-log-empty" class="saved-reply-empty hidden">Belum ada riwayat penghapusan.</p>
         </div>
       </div>
     </div>

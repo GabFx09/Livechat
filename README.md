@@ -143,6 +143,7 @@ Cara kerjanya:
   - **Profil**: ganti nama tampilan & foto profil admin, muncul di tiap balasan ke customer.
   - **Appearance**: atur nama brand, warna tema, dan ikon bubble yang tampil di widget chat website perusahaan — begitu disimpan, otomatis ikut berubah di widget (`js/widget.js`) tanpa perlu edit ulang snippet, dan juga ikut mewarnai halaman chat customer.
   - **Auto-Chat**: aktifkan sapaan otomatis yang langsung terkirim (dari sisi customer sendiri, ditandai `autoGreeting: true` di Firestore) begitu customer **baru** pertama kali mulai chat, sebelum mereka mengetik apa pun. Customer lama yang sudah pernah chat tidak dikirimi ulang.
+  - **Riwayat**: daftar jejak audit tiap kali chat customer dihapus lewat tombol "Hapus Semua Chat" (siapa yang hapus, kapan, dan berapa pesan). Disimpan terpisah di `deletionLogs` supaya tetap ada walau dokumen customer-nya sendiri sudah lenyap; tidak bisa diedit/dihapus siapa pun demi menjaga keasliannya.
   Tombol **Keluar** juga ada di dalam panel Pengaturan ini (bagian bawah).
 - **Kirim gambar**: customer & admin bisa kirim gambar lewat ikon 🖼️, otomatis dikompres & disimpan langsung di Firestore (bukan Firebase Storage, supaya tetap gratis tanpa kartu kredit). Maks. sekitar 700KB per gambar.
 - **Edit & hapus pesan (admin saja)**: arahkan kursor ke pesan balasan admin sendiri untuk lihat ikon ✏ (edit teks) dan 🗑 (hapus). Pesan dari customer tidak bisa diubah admin. Pesan yang diedit diberi label "(diedit)".

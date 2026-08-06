@@ -17,6 +17,7 @@ import {
   collection,
   query,
   orderBy,
+  limit,
   onSnapshot,
   addDoc,
   serverTimestamp,
@@ -121,6 +122,7 @@ const settingsBtn = document.getElementById("settings-btn");
 const settingsProfileView = document.getElementById("settings-profile-view");
 const settingsAppearanceView = document.getElementById("settings-appearance-view");
 const settingsAutochatView = document.getElementById("settings-autochat-view");
+const settingsHistoryView = document.getElementById("settings-history-view");
 const avatarPreview = document.getElementById("avatar-preview");
 const photoInput = document.getElementById("photo-input");
 const displayNameInput = document.getElementById("display-name-input");
@@ -139,6 +141,9 @@ const autochatEnabledInput = document.getElementById("autochat-enabled-input");
 const autochatMessageInput = document.getElementById("autochat-message-input");
 const autochatSaveBtn = document.getElementById("autochat-save-btn");
 const autochatError = document.getElementById("autochat-error");
+
+const historyLogList = document.getElementById("history-log-list");
+const historyLogEmpty = document.getElementById("history-log-empty");
 
 const savedRepliesBtn = document.getElementById("saved-replies-btn");
 const savedRepliesOverlay = document.getElementById("saved-replies-overlay");
@@ -211,7 +216,8 @@ function isSettingsOpen() {
   return (
     !settingsProfileView.classList.contains("hidden") ||
     !settingsAppearanceView.classList.contains("hidden") ||
-    !settingsAutochatView.classList.contains("hidden")
+    !settingsAutochatView.classList.contains("hidden") ||
+    !settingsHistoryView.classList.contains("hidden")
   );
 }
 
@@ -931,6 +937,15 @@ async function deleteAllChat(uid, name) {
       await batch.commit();
     }
 
+    await addDoc(collection(db, ...wsPath("deletionLogs")), {
+      customerId: uid,
+      customerName: name,
+      messageCount: msgsSnap.size,
+      deletedBy: currentAdmin.uid,
+      deletedByName: currentAdmin.name,
+      deletedAt: serverTimestamp()
+    }).catch(() => {});
+
     if (uid === activeCustomerUid) {
       if (unsubMessages) unsubMessages();
       unsubMessages = null;
@@ -1298,6 +1313,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   settingsProfileView.classList.add("hidden");
   settingsAppearanceView.classList.add("hidden");
   settingsAutochatView.classList.add("hidden");
+  settingsHistoryView.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
   statsView.classList.add("hidden");
   customerPanel.classList.add("hidden");
@@ -1342,6 +1358,7 @@ function applyRoute() {
   settingsProfileView.classList.add("hidden");
   settingsAppearanceView.classList.add("hidden");
   settingsAutochatView.classList.add("hidden");
+  settingsHistoryView.classList.add("hidden");
   statsView.classList.add("hidden");
 
   if (route === "settings" || route === "settings/profile") {
@@ -1354,6 +1371,10 @@ function applyRoute() {
   }
   if (route === "settings/autochat") {
     openAutochatSettings();
+    return;
+  }
+  if (route === "settings/history") {
+    openHistorySettings();
     return;
   }
   if (route === "stats") {
@@ -1408,6 +1429,55 @@ function openAutochatSettings() {
   autochatMessageInput.value = currentAdmin.autoGreetingMessage || "";
   autochatError.classList.add("hidden");
   settingsAutochatView.classList.remove("hidden");
+}
+
+async function openHistorySettings() {
+  appScreen.classList.add("hidden");
+  settingsHistoryView.classList.remove("hidden");
+  historyLogList.innerHTML = "";
+  historyLogEmpty.classList.add("hidden");
+
+  try {
+    const q = query(collection(db, ...wsPath("deletionLogs")), orderBy("deletedAt", "desc"), limit(100));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      historyLogEmpty.classList.remove("hidden");
+      return;
+    }
+
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      const li = document.createElement("li");
+      li.className = "history-log-item";
+
+      const icon = document.createElement("span");
+      icon.className = "history-log-icon";
+      icon.textContent = "🗑";
+      li.appendChild(icon);
+
+      const body = document.createElement("div");
+      body.className = "history-log-body";
+
+      const title = document.createElement("span");
+      title.className = "history-log-title";
+      title.textContent = `Chat dengan "${data.customerName || "?"}" dihapus`;
+      body.appendChild(title);
+
+      const meta = document.createElement("span");
+      meta.className = "history-log-meta";
+      const when = formatDateWIB(data.deletedAt) + ", " + formatTimeWIB(data.deletedAt);
+      meta.textContent =
+        `Oleh ${data.deletedByName || "?"} • ${when} • ${data.messageCount ?? 0} pesan`;
+      body.appendChild(meta);
+
+      li.appendChild(body);
+      historyLogList.appendChild(li);
+    });
+  } catch (err) {
+    historyLogEmpty.textContent = "Gagal memuat riwayat: " + err.message;
+    historyLogEmpty.classList.remove("hidden");
+  }
 }
 
 settingsBtn.addEventListener("click", () => {
