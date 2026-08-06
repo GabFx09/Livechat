@@ -384,6 +384,10 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
       currentAdmin.autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       currentAdmin.autoGreetingMessage = wsData.autoGreetingMessage || "";
       currentAdmin.autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
+      currentAdmin.autoGreetingOptionReplies =
+        wsData.autoGreetingOptionReplies && typeof wsData.autoGreetingOptionReplies === "object"
+          ? wsData.autoGreetingOptionReplies
+          : {};
       if (currentAdmin.workspaceName) document.title = currentAdmin.workspaceName + " - Admin";
     }
   } catch (err) {
@@ -1458,7 +1462,12 @@ function openAutochatSettings() {
   appScreen.classList.add("hidden");
   autochatEnabledInput.checked = !!currentAdmin.autoGreetingEnabled;
   autochatMessageInput.value = currentAdmin.autoGreetingMessage || "";
-  autochatOptionsInput.value = (currentAdmin.autoGreetingOptions || []).join("\n");
+  autochatOptionsInput.value = (currentAdmin.autoGreetingOptions || [])
+    .map((label) => {
+      const reply = (currentAdmin.autoGreetingOptionReplies || {})[label];
+      return reply ? `${label} :: ${reply}` : label;
+    })
+    .join("\n");
   autochatError.classList.add("hidden");
   settingsAutochatView.classList.remove("hidden");
 }
@@ -1679,13 +1688,34 @@ appearanceSaveBtn.addEventListener("click", async () => {
   }
 });
 
+// Tiap baris di textarea Pilihan Bantuan boleh format "Label" saja (tombol
+// polos) atau "Label :: Balasan" (tombol yang begitu diklik dapat balasan
+// otomatis). Dipisah pas titik dua ganda PERTAMA saja, biar balasan yang
+// isinya "::" lagi di tengah kalimat tidak ikut kepotong.
+function parseAutochatOptions(raw) {
+  const options = [];
+  const optionReplies = {};
+  raw.split("\n").forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const sepIndex = trimmed.indexOf("::");
+    if (sepIndex === -1) {
+      options.push(trimmed);
+      return;
+    }
+    const label = trimmed.slice(0, sepIndex).trim();
+    const reply = trimmed.slice(sepIndex + 2).trim();
+    if (!label) return;
+    options.push(label);
+    if (reply) optionReplies[label] = reply;
+  });
+  return { options, optionReplies };
+}
+
 autochatSaveBtn.addEventListener("click", async () => {
   const enabled = autochatEnabledInput.checked;
   const message = autochatMessageInput.value.trim();
-  const options = autochatOptionsInput.value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const { options, optionReplies } = parseAutochatOptions(autochatOptionsInput.value);
 
   if (enabled && !message) {
     autochatError.textContent = "Isi dulu pesan sapaannya sebelum mengaktifkan.";
@@ -1699,12 +1729,18 @@ autochatSaveBtn.addEventListener("click", async () => {
   try {
     await setDoc(
       doc(db, ...wsPath()),
-      { autoGreetingEnabled: enabled, autoGreetingMessage: message, autoGreetingOptions: options },
+      {
+        autoGreetingEnabled: enabled,
+        autoGreetingMessage: message,
+        autoGreetingOptions: options,
+        autoGreetingOptionReplies: optionReplies
+      },
       { merge: true }
     );
     currentAdmin.autoGreetingEnabled = enabled;
     currentAdmin.autoGreetingMessage = message;
     currentAdmin.autoGreetingOptions = options;
+    currentAdmin.autoGreetingOptionReplies = optionReplies;
     navigateTo("open");
   } catch (err) {
     autochatError.textContent = "Gagal menyimpan: " + err.message;

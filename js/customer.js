@@ -45,6 +45,7 @@ let workspaceBrandName = null;
 let autoGreetingEnabled = false;
 let autoGreetingMessage = "";
 let autoGreetingOptions = [];
+let autoGreetingOptionReplies = {};
 let sessionActive = false; // false = belum chat, atau sesi dihapus admin & belum mulai ulang
 let unsubMessages = null;
 let unsubCustomerDoc = null;
@@ -238,7 +239,7 @@ function renderMessage(m) {
       btn.type = "button";
       btn.className = "option-btn";
       btn.textContent = opt;
-      btn.addEventListener("click", () => sendTextMessage(opt));
+      btn.addEventListener("click", () => selectOption(opt));
       optWrap.appendChild(btn);
     });
     div.appendChild(optWrap);
@@ -458,6 +459,29 @@ async function sendTextMessage(text) {
   bumpStat("customerMessageCount");
 }
 
+// Diklik dari tombol pilihan bantuan (lihat renderMessage type "options").
+// Kirim pilihannya sebagai pesan customer biasa dulu, lalu kalau admin sudah
+// nyetel balasan otomatis buat pilihan itu (Pengaturan > Auto-Chat), susulkan
+// balasannya dengan jeda singkat.
+async function selectOption(opt) {
+  await sendTextMessage(opt);
+
+  const reply = autoGreetingOptionReplies[opt];
+  if (!reply || !currentUser || !sessionActive) return;
+
+  setTimeout(() => {
+    if (!currentUser || !sessionActive) return;
+    addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
+      sender: "admin",
+      type: "text",
+      text: reply,
+      optionLabel: opt,
+      autoReply: true,
+      timestamp: serverTimestamp()
+    }).catch(() => {});
+  }, 800);
+}
+
 messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
@@ -568,6 +592,10 @@ async function init() {
       autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       autoGreetingMessage = wsData.autoGreetingMessage || "";
       autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
+      autoGreetingOptionReplies =
+        wsData.autoGreetingOptionReplies && typeof wsData.autoGreetingOptionReplies === "object"
+          ? wsData.autoGreetingOptionReplies
+          : {};
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.

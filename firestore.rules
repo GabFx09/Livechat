@@ -29,7 +29,8 @@ service cloud.firestore {
 
       allow update: if isWorkspaceAdmin() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage', 'autoGreetingOptions']
+          ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage',
+           'autoGreetingOptions', 'autoGreetingOptionReplies']
         );
 
       // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa
@@ -108,6 +109,20 @@ service cloud.firestore {
           request.resource.data.keys().hasOnly(['sender', 'type', 'autoGreeting', 'options', 'timestamp']) &&
           request.resource.data.options ==
             get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.autoGreetingOptions;
+
+        // Balasan otomatis begitu customer klik salah satu pilihan bantuan.
+        // optionLabel nunjuk baris mana di map autoGreetingOptionReplies yang
+        // harus dicocokkan -- teksnya wajib sama persis dengan isi map itu,
+        // jadi customer tidak bisa nyuruh "admin" bilang apa saja.
+        allow create: if request.auth != null &&
+          request.auth.uid == customerId &&
+          request.resource.data.sender == 'admin' &&
+          request.resource.data.type == 'text' &&
+          request.resource.data.autoReply == true &&
+          request.resource.data.keys().hasOnly(['sender', 'type', 'autoReply', 'optionLabel', 'text', 'timestamp']) &&
+          request.resource.data.text ==
+            get(/databases/$(database)/documents/workspaces/$(workspaceId))
+              .data.autoGreetingOptionReplies[request.resource.data.optionLabel];
 
         allow update: if isWorkspaceAdmin() &&
           resource.data.sender == 'admin' &&
