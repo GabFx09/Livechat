@@ -11,11 +11,10 @@ export const firebaseConfig = {
 };
 
 // Site key reCAPTCHA v3 buat Firebase App Check (proteksi anti-bot/spam,
-// tetap gratis di Spark plan). Ambil dari Firebase Console > Build >
-// App Check > Apps > daftarkan app ini dengan provider reCAPTCHA v3
-// (Firebase yang bikinkan site key-nya, tinggal disalin ke sini). Lihat
+// tetap gratis di Spark plan). Didaftarkan lewat Firebase Console >
+// Security > App Check > Apps, situs reCAPTCHA-nya dibuat di
+// google.com/recaptcha/admin (site key di sini, secret key ditempel di
+// App Check, BUKAN di kode -- secret key tidak boleh publik). Lihat
 // README.md untuk langkah lengkap + kenapa jangan langsung nyalain
-// "Enforce" sebelum yakin token-nya jalan normal. Dibiarkan placeholder
-// = App Check otomatis dilewati (app tetap jalan seperti biasa), bukan
-// bikin error.
-export const RECAPTCHA_V3_SITE_KEY = "PASTE_RECAPTCHA_V3_SITE_KEY_HERE";
+// "Enforce" sebelum yakin token-nya jalan normal.
+export const RECAPTCHA_V3_SITE_KEY = "6Lfa73ctAAAAAEktz1HR1a5GeYoYrI4m0VcWBNZ0";

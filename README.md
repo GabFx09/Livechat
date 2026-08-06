@@ -42,11 +42,18 @@ Di Firebase Console, buka **Authentication** (kategori **Security**) → tab **S
 
 Tanpa ini, chat customer tetap bisa dipakai script/bot untuk bikin ribuan sesi/pesan palsu (anonymous auth publik). App Check menandai tiap request dengan token dari reCAPTCHA v3 supaya Firestore bisa bedakan browser asli vs script — gratis, tidak perlu Blaze plan.
 
-1. Firebase Console → **Build > App Check**.
-2. Tab **Apps** → pilih Web App yang sudah didaftarkan di langkah 1 → **Register**.
-3. Pilih provider **reCAPTCHA v3** → ikuti langkah untuk generate site key (Firebase yang bikinkan otomatis, atau pakai punya sendiri dari https://www.google.com/recaptcha/admin).
-4. Salin site key-nya ke `RECAPTCHA_V3_SITE_KEY` di `js/firebase-config.js` (gantikan placeholder `PASTE_RECAPTCHA_V3_SITE_KEY_HERE`).
-5. **Jangan langsung nyalain toggle "Enforce"** di App Check untuk Firestore. Biarkan dulu di mode default (monitor-only) beberapa hari, cek tab **Requests** di App Check buat pastikan traffic asli (customer & admin) memang dapat token *verified* — baru nyalain Enforce kalau sudah yakin, supaya tidak keburu ngeblokir pengguna sah gara-gara salah setup.
+1. Firebase Console → kategori **Security > App Check** (nama menunya bisa beda tergantung versi Console — cari yang ada tulisan "App Check").
+2. Tab **Apps** → cari Web App yang sudah didaftarkan di langkah 1 → **Register**.
+3. Pilih provider **reCAPTCHA** (yang biasa/v3, **bukan** "reCAPTCHA Enterprise" — itu produk terpisah, lebih ribet setupnya).
+4. Kalau diminta site key/secret key (bukan di-generate otomatis), buka tab baru ke https://www.google.com/recaptcha/admin/create:
+   - **Label**: bebas
+   - **reCAPTCHA type**: pilih **Score based (v3)**
+   - **Domains**: `gabfx09.github.io` (tambahkan `localhost` juga kalau mau tes lokal)
+   - **Google Cloud Platform > Project name**: pilih project Firebase kamu (mis. `livechat-saya`), bukan "My First Project"
+   - Submit → muncul **Site Key** dan **Secret Key**
+5. Tempel **Secret Key** di halaman App Check tadi (Firebase). **Site Key** disimpan buat langkah berikutnya — dua kunci ini beda, jangan tertukar.
+6. Salin **Site Key**-nya ke `RECAPTCHA_V3_SITE_KEY` di `js/firebase-config.js`. **Jangan pernah** taruh Secret Key di kode manapun — kode ini publik di GitHub, Secret Key harus tetap rahasia, cuma boleh ada di Firebase Console.
+7. **Jangan langsung nyalain toggle "Enforce"** di App Check untuk Firestore. Biarkan dulu di mode default (monitor-only) beberapa hari, cek tab **Requests** di App Check buat pastikan traffic asli (customer & admin) memang dapat token *verified* — baru nyalain Enforce kalau sudah yakin, supaya tidak keburu ngeblokir pengguna sah gara-gara salah setup.
 
 ## 4. Menambahkan perusahaan baru (workspace)
 
