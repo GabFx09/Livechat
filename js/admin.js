@@ -139,6 +139,7 @@ const appearanceError = document.getElementById("appearance-error");
 
 const autochatEnabledInput = document.getElementById("autochat-enabled-input");
 const autochatMessageInput = document.getElementById("autochat-message-input");
+const autochatOptionsInput = document.getElementById("autochat-options-input");
 const autochatSaveBtn = document.getElementById("autochat-save-btn");
 const autochatError = document.getElementById("autochat-error");
 
@@ -382,6 +383,7 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
       currentAdmin.workspaceBubbleIcon = wsData.bubbleIcon || "💬";
       currentAdmin.autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       currentAdmin.autoGreetingMessage = wsData.autoGreetingMessage || "";
+      currentAdmin.autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
       if (currentAdmin.workspaceName) document.title = currentAdmin.workspaceName + " - Admin";
     }
   } catch (err) {
@@ -1069,6 +1071,20 @@ function renderMessage(m, messageId) {
     img.src = m.imageBase64;
     img.addEventListener("click", () => showImageLightbox(m.imageBase64));
     div.appendChild(img);
+  } else if (m.type === "options" && Array.isArray(m.options) && m.options.length) {
+    const p = document.createElement("p");
+    p.textContent = m.text || "Silakan pilih salah satu:";
+    div.appendChild(p);
+
+    const optWrap = document.createElement("div");
+    optWrap.className = "option-buttons";
+    m.options.forEach((opt) => {
+      const tag = document.createElement("span");
+      tag.className = "option-btn option-tag";
+      tag.textContent = opt;
+      optWrap.appendChild(tag);
+    });
+    div.appendChild(optWrap);
   } else {
     const p = document.createElement("p");
     p.textContent = m.text || "";
@@ -1442,6 +1458,7 @@ function openAutochatSettings() {
   appScreen.classList.add("hidden");
   autochatEnabledInput.checked = !!currentAdmin.autoGreetingEnabled;
   autochatMessageInput.value = currentAdmin.autoGreetingMessage || "";
+  autochatOptionsInput.value = (currentAdmin.autoGreetingOptions || []).join("\n");
   autochatError.classList.add("hidden");
   settingsAutochatView.classList.remove("hidden");
 }
@@ -1534,6 +1551,20 @@ function renderArchivedMessage(m, customerName) {
     img.src = m.imageBase64;
     img.addEventListener("click", () => showImageLightbox(m.imageBase64));
     div.appendChild(img);
+  } else if (m.type === "options" && Array.isArray(m.options) && m.options.length) {
+    const p = document.createElement("p");
+    p.textContent = m.text || "Silakan pilih salah satu:";
+    div.appendChild(p);
+
+    const optWrap = document.createElement("div");
+    optWrap.className = "option-buttons";
+    m.options.forEach((opt) => {
+      const tag = document.createElement("span");
+      tag.className = "option-btn option-tag";
+      tag.textContent = opt;
+      optWrap.appendChild(tag);
+    });
+    div.appendChild(optWrap);
   } else {
     const p = document.createElement("p");
     p.textContent = m.text || "";
@@ -1651,6 +1682,10 @@ appearanceSaveBtn.addEventListener("click", async () => {
 autochatSaveBtn.addEventListener("click", async () => {
   const enabled = autochatEnabledInput.checked;
   const message = autochatMessageInput.value.trim();
+  const options = autochatOptionsInput.value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   if (enabled && !message) {
     autochatError.textContent = "Isi dulu pesan sapaannya sebelum mengaktifkan.";
@@ -1664,11 +1699,12 @@ autochatSaveBtn.addEventListener("click", async () => {
   try {
     await setDoc(
       doc(db, ...wsPath()),
-      { autoGreetingEnabled: enabled, autoGreetingMessage: message },
+      { autoGreetingEnabled: enabled, autoGreetingMessage: message, autoGreetingOptions: options },
       { merge: true }
     );
     currentAdmin.autoGreetingEnabled = enabled;
     currentAdmin.autoGreetingMessage = message;
+    currentAdmin.autoGreetingOptions = options;
     navigateTo("open");
   } catch (err) {
     autochatError.textContent = "Gagal menyimpan: " + err.message;

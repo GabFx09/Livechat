@@ -1239,6 +1239,45 @@ button, a, input, textarea {
   white-space: pre-wrap;
 }
 
+.option-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.option-btn {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.option-btn:hover {
+  background: var(--accent-dim);
+}
+
+.option-btn:active {
+  transform: scale(0.97);
+}
+
+/* Versi read-only dipakai di tampilan admin & arsip riwayat -- bukan
+   tombol beneran, cuma nunjukin pilihan apa yang ditawarkan ke customer. */
+.option-tag {
+  cursor: default;
+  border-style: dashed;
+  color: var(--text-dim);
+}
+
+.option-tag:hover {
+  background: transparent;
+}
+
 .typing-preview {
   padding: 12px 20px;
   font-size: 1.05rem;

@@ -29,7 +29,7 @@ service cloud.firestore {
 
       allow update: if isWorkspaceAdmin() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage']
+          ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage', 'autoGreetingOptions']
         );
 
       // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa
@@ -94,6 +94,20 @@ service cloud.firestore {
           request.resource.data.autoGreeting == true &&
           request.resource.data.text ==
             get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.autoGreetingMessage;
+
+        // Menu pilihan bantuan yang menyusul sapaan (juga fitur Pengaturan >
+        // Auto-Chat). Sama polanya: array pilihannya wajib sama persis
+        // dengan autoGreetingOptions di workspace doc, dan hasOnly membatasi
+        // field yang boleh disentuh supaya customer tidak bisa menyelundupkan
+        // field lain (mis. senderPhoto) lewat celah ini.
+        allow create: if request.auth != null &&
+          request.auth.uid == customerId &&
+          request.resource.data.sender == 'admin' &&
+          request.resource.data.type == 'options' &&
+          request.resource.data.autoGreeting == true &&
+          request.resource.data.keys().hasOnly(['sender', 'type', 'autoGreeting', 'options', 'timestamp']) &&
+          request.resource.data.options ==
+            get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.autoGreetingOptions;
 
         allow update: if isWorkspaceAdmin() &&
           resource.data.sender == 'admin' &&

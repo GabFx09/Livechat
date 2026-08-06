@@ -44,6 +44,7 @@ let currentUser = null; // { uid, name }
 let workspaceBrandName = null;
 let autoGreetingEnabled = false;
 let autoGreetingMessage = "";
+let autoGreetingOptions = [];
 let sessionActive = false; // false = belum chat, atau sesi dihapus admin & belum mulai ulang
 let unsubMessages = null;
 let unsubCustomerDoc = null;
@@ -225,6 +226,22 @@ function renderMessage(m) {
     img.src = m.imageBase64;
     img.addEventListener("click", () => showImageLightbox(m.imageBase64));
     div.appendChild(img);
+  } else if (m.type === "options" && Array.isArray(m.options) && m.options.length) {
+    const p = document.createElement("p");
+    p.textContent = m.text || "Silakan pilih salah satu:";
+    div.appendChild(p);
+
+    const optWrap = document.createElement("div");
+    optWrap.className = "option-buttons";
+    m.options.forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "option-btn";
+      btn.textContent = opt;
+      btn.addEventListener("click", () => sendTextMessage(opt));
+      optWrap.appendChild(btn);
+    });
+    div.appendChild(optWrap);
   } else {
     const p = document.createElement("p");
     p.textContent = m.text || "";
@@ -410,11 +427,11 @@ messageInput.addEventListener("input", () => {
   updateTypingDraft(messageInput.value);
 });
 
-messageForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = messageInput.value.trim();
+// Dipakai baik oleh form kirim pesan biasa maupun tombol pilihan bantuan
+// (lihat renderMessage type "options") -- keduanya butuh urutan addDoc ->
+// touchCustomerDoc -> bumpStat yang persis sama.
+async function sendTextMessage(text) {
   if (!text || !currentUser || !sessionActive) return;
-  messageInput.value = "";
 
   try {
     await addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
@@ -439,6 +456,14 @@ messageForm.addEventListener("submit", async (e) => {
 
   bumpStat("messageCount");
   bumpStat("customerMessageCount");
+}
+
+messageForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = messageInput.value.trim();
+  if (!text) return;
+  messageInput.value = "";
+  await sendTextMessage(text);
 });
 
 imageInput.addEventListener("change", async () => {
@@ -491,14 +516,30 @@ startBtn.addEventListener("click", async () => {
     enterChat(user.uid, name);
     captureVisitorInfo(user.uid);
 
-    if (isNewCustomer && autoGreetingEnabled && autoGreetingMessage) {
-      addDoc(collection(db, ...wsPath("chats", user.uid, "messages")), {
-        sender: "admin",
-        type: "text",
-        text: autoGreetingMessage,
-        timestamp: serverTimestamp(),
-        autoGreeting: true
-      }).catch(() => {});
+    if (isNewCustomer && autoGreetingEnabled) {
+      if (autoGreetingMessage) {
+        addDoc(collection(db, ...wsPath("chats", user.uid, "messages")), {
+          sender: "admin",
+          type: "text",
+          text: autoGreetingMessage,
+          timestamp: serverTimestamp(),
+          autoGreeting: true
+        }).catch(() => {});
+      }
+
+      // Menyusul sapaan dengan jeda singkat (kesan "bot lagi ngetik"),
+      // supaya tidak numpuk 2 pesan dalam 1 detik yang sama.
+      if (autoGreetingOptions.length > 0) {
+        setTimeout(() => {
+          addDoc(collection(db, ...wsPath("chats", user.uid, "messages")), {
+            sender: "admin",
+            type: "options",
+            options: autoGreetingOptions,
+            timestamp: serverTimestamp(),
+            autoGreeting: true
+          }).catch(() => {});
+        }, 900);
+      }
     }
   } catch (err) {
     showStartError("Gagal memulai chat: " + err.message);
@@ -526,6 +567,7 @@ async function init() {
       if (wsData.themeColor) applyThemeColor(wsData.themeColor);
       autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       autoGreetingMessage = wsData.autoGreetingMessage || "";
+      autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
