@@ -144,6 +144,10 @@ const autochatError = document.getElementById("autochat-error");
 
 const historyLogList = document.getElementById("history-log-list");
 const historyLogEmpty = document.getElementById("history-log-empty");
+const historyDetailOverlay = document.getElementById("history-detail-overlay");
+const historyDetailTitle = document.getElementById("history-detail-title");
+const historyDetailMessages = document.getElementById("history-detail-messages");
+const historyDetailCloseBtn = document.getElementById("history-detail-close-btn");
 
 const savedRepliesBtn = document.getElementById("saved-replies-btn");
 const savedRepliesOverlay = document.getElementById("saved-replies-overlay");
@@ -272,6 +276,9 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !savedRepliesOverlay.classList.contains("hidden")) {
     savedRepliesOverlay.classList.add("hidden");
+  }
+  if (e.key === "Escape" && !historyDetailOverlay.classList.contains("hidden")) {
+    historyDetailOverlay.classList.add("hidden");
   }
   if (e.key === "Escape" && !statsView.classList.contains("hidden")) {
     navigateTo("open");
@@ -916,7 +923,9 @@ function renderCustomerPanel(data, uid) {
 // Hapus seluruh riwayat chat + dokumen profil customer. Dokumen customer ikut
 // terhapus (bukan cuma pesannya) supaya customer.js tidak nemu sesi lama pas
 // auto-rejoin (lihat init() di customer.js) dan dipaksa isi nama lagi -> sesi
-// baru dari nol, sesuai permintaan.
+// baru dari nol, sesuai permintaan. Isi percakapannya sendiri disalin dulu ke
+// deletionLogs/{logId}/messages sebelum dihapus, supaya masih bisa dibuka
+// lagi lewat Pengaturan > Riwayat walau chat aslinya sudah lenyap.
 async function deleteAllChat(uid, name) {
   if (
     !confirm(
@@ -927,24 +936,30 @@ async function deleteAllChat(uid, name) {
 
   try {
     const msgsSnap = await getDocs(collection(db, ...wsPath("chats", uid, "messages")));
-    const refs = msgsSnap.docs.map((d) => d.ref);
-    refs.push(doc(db, ...wsPath("customers", uid)));
+    const logRef = doc(collection(db, ...wsPath("deletionLogs")));
 
-    const CHUNK_SIZE = 450; // batas writeBatch Firestore adalah 500 operasi
-    for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
-      const batch = writeBatch(db);
-      refs.slice(i, i + CHUNK_SIZE).forEach((ref) => batch.delete(ref));
-      await batch.commit();
-    }
-
-    await addDoc(collection(db, ...wsPath("deletionLogs")), {
+    await setDoc(logRef, {
       customerId: uid,
       customerName: name,
       messageCount: msgsSnap.size,
       deletedBy: currentAdmin.uid,
       deletedByName: currentAdmin.name,
       deletedAt: serverTimestamp()
-    }).catch(() => {});
+    });
+
+    // Tiap pesan = 1 salin (ke arsip) + 1 hapus (dari chat asli) = 2 operasi,
+    // jadi chunk-nya dikecilkan dari batas 500 operasi/batch Firestore.
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < msgsSnap.docs.length; i += CHUNK_SIZE) {
+      const batch = writeBatch(db);
+      msgsSnap.docs.slice(i, i + CHUNK_SIZE).forEach((docSnap) => {
+        batch.set(doc(db, ...wsPath("deletionLogs", logRef.id, "messages", docSnap.id)), docSnap.data());
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+    }
+
+    await deleteDoc(doc(db, ...wsPath("customers", uid)));
 
     if (uid === activeCustomerUid) {
       if (unsubMessages) unsubMessages();
@@ -1472,6 +1487,7 @@ async function openHistorySettings() {
       body.appendChild(meta);
 
       li.appendChild(body);
+      li.addEventListener("click", () => openHistoryDetail(docSnap.id, data.customerName));
       historyLogList.appendChild(li);
     });
   } catch (err) {
@@ -1479,6 +1495,104 @@ async function openHistorySettings() {
     historyLogEmpty.classList.remove("hidden");
   }
 }
+
+// Versi baca-saja dari renderMessage(), dipakai buat nampilin pesan yang
+// sudah diarsipkan di deletionLogs/{logId}/messages -- tidak ada tombol edit
+// atau hapus (memang sengaja permanen), dan label "Anda" diganti nama admin
+// pengirim asli karena yang buka riwayat belum tentu admin yang sama.
+function renderArchivedMessage(m, customerName) {
+  const div = document.createElement("div");
+  div.className = "message " + (m.sender === "admin" ? "mine" : "theirs");
+
+  const senderRow = document.createElement("div");
+  senderRow.className = "sender-row";
+
+  if (m.sender === "admin" && m.senderPhoto) {
+    const avatar = document.createElement("img");
+    avatar.className = "msg-avatar";
+    avatar.src = m.senderPhoto;
+    senderRow.appendChild(avatar);
+  }
+
+  const senderLabel = document.createElement("span");
+  senderLabel.className = "sender";
+  senderLabel.textContent = m.sender === "admin" ? m.senderName || "Admin" : customerName || "Customer";
+  senderRow.appendChild(senderLabel);
+
+  if (m.edited) {
+    const editedBadge = document.createElement("span");
+    editedBadge.className = "edited-badge";
+    editedBadge.textContent = "(diedit)";
+    senderRow.appendChild(editedBadge);
+  }
+
+  div.appendChild(senderRow);
+
+  if (m.type === "image" && m.imageBase64) {
+    const img = document.createElement("img");
+    img.className = "chat-image";
+    img.src = m.imageBase64;
+    img.addEventListener("click", () => showImageLightbox(m.imageBase64));
+    div.appendChild(img);
+  } else {
+    const p = document.createElement("p");
+    p.textContent = m.text || "";
+    div.appendChild(p);
+  }
+
+  const timeEl = document.createElement("span");
+  timeEl.className = "msg-time";
+  timeEl.textContent = formatTimeWIB(m.timestamp);
+  div.appendChild(timeEl);
+
+  return div;
+}
+
+async function openHistoryDetail(logId, customerName) {
+  historyDetailTitle.textContent = `Riwayat Chat dengan "${customerName || "?"}"`;
+  historyDetailMessages.innerHTML = "";
+  historyDetailOverlay.classList.remove("hidden");
+
+  try {
+    const q = query(
+      collection(db, ...wsPath("deletionLogs", logId, "messages")),
+      orderBy("timestamp", "asc")
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      const empty = document.createElement("p");
+      empty.className = "saved-reply-empty";
+      empty.textContent = "Tidak ada pesan tersimpan untuk riwayat ini.";
+      historyDetailMessages.appendChild(empty);
+      return;
+    }
+
+    let lastDate = null;
+    snap.forEach((docSnap) => {
+      const m = docSnap.data();
+      const dateLabel = formatDateWIB(m.timestamp);
+      if (dateLabel && dateLabel !== lastDate) {
+        historyDetailMessages.appendChild(createDateDivider(dateLabel));
+        lastDate = dateLabel;
+      }
+      historyDetailMessages.appendChild(renderArchivedMessage(m, customerName));
+    });
+  } catch (err) {
+    const errEl = document.createElement("p");
+    errEl.className = "saved-reply-empty";
+    errEl.textContent = "Gagal memuat isi chat: " + err.message;
+    historyDetailMessages.appendChild(errEl);
+  }
+}
+
+historyDetailCloseBtn.addEventListener("click", () => {
+  historyDetailOverlay.classList.add("hidden");
+});
+
+historyDetailOverlay.addEventListener("click", (e) => {
+  if (e.target === historyDetailOverlay) historyDetailOverlay.classList.add("hidden");
+});
 
 settingsBtn.addEventListener("click", () => {
   navigateTo("settings/profile");

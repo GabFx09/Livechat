@@ -120,6 +120,16 @@ service cloud.firestore {
 
         allow update: if false;
         allow delete: if false;
+
+        // Salinan tiap pesan yang ikut terhapus, dipindah ke sini apa
+        // adanya (bukan ditulis ulang) sebelum dokumen aslinya dihapus --
+        // sama-sama read-only permanen begitu tersimpan.
+        match /messages/{messageId} {
+          allow read: if isWorkspaceAdmin();
+          allow create: if isWorkspaceAdmin();
+          allow update: if false;
+          allow delete: if false;
+        }
       }
 
       // stats/{YYYY-MM-DD} = counter harian untuk dashboard statistik admin.

@@ -1011,6 +1011,13 @@ button, a, input, textarea {
   border-radius: var(--radius-sm);
   background: var(--panel-alt);
   border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.history-log-item:hover {
+  border-color: var(--text-dim);
+  background: var(--accent-dim);
 }
 
 .history-log-icon {
@@ -1474,6 +1481,30 @@ button, a, input, textarea {
   max-width: 340px;
   text-align: center;
   box-shadow: var(--shadow-lg);
+}
+
+.history-detail-card {
+  padding: 0;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  overflow: hidden;
+}
+
+.history-detail-card .customer-panel-header {
+  border-radius: 0;
+}
+
+.history-detail-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .modal-card h2 {
