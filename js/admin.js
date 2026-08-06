@@ -1194,6 +1194,7 @@ function startEditMessage(messageId, currentText, bubbleEl) {
         edited: true,
         editedAt: serverTimestamp()
       });
+      indexSearchText(activeCustomerUid, newText);
     } catch (err) {
       alert("Gagal menyimpan perubahan: " + err.message);
       saveBtn.disabled = false;
@@ -1254,20 +1255,34 @@ function openCustomer(uid, name) {
   });
 }
 
-async function touchCustomerDoc(lastMessage, searchableText) {
-  const update = {
-    lastMessage,
-    lastMessageAt: serverTimestamp(),
-    lastSender: "admin",
-    unreadCount: 0,
-    archived: false,
-    archivedAt: null,
-    expireAt: null
-  };
-  if (searchableText) {
-    update.searchText = arrayUnion(searchableText);
-  }
-  await setDoc(doc(db, ...wsPath("customers", activeCustomerUid)), update, { merge: true });
+async function touchCustomerDoc(lastMessage) {
+  await setDoc(
+    doc(db, ...wsPath("customers", activeCustomerUid)),
+    {
+      lastMessage,
+      lastMessageAt: serverTimestamp(),
+      lastSender: "admin",
+      unreadCount: 0,
+      archived: false,
+      archivedAt: null,
+      expireAt: null
+    },
+    { merge: true }
+  );
+}
+
+function indexSearchText(uid, text) {
+  if (!text) return;
+  setDoc(doc(db, ...wsPath("customers", uid)), { searchText: arrayUnion(text) }, { merge: true }).catch(() => {});
+}
+
+// SATU-SATUNYA titik yang boleh addDoc ke chats/{uid}/messages dari sisi
+// admin. Kalau messageData ada field `text`, otomatis ikut terindeks ke
+// searchText -- jenis pesan admin baru nanti tidak akan lagi kelewatan
+// diindeks (lihat catatan yang sama di customer.js).
+async function writeMessage(uid, messageData) {
+  await addDoc(collection(db, ...wsPath("chats", uid, "messages")), messageData);
+  if (messageData.text) indexSearchText(uid, messageData.text);
 }
 
 messageForm.addEventListener("submit", async (e) => {
@@ -1277,7 +1292,7 @@ messageForm.addEventListener("submit", async (e) => {
   messageInput.value = "";
 
   try {
-    await addDoc(collection(db, ...wsPath("chats", activeCustomerUid, "messages")), {
+    await writeMessage(activeCustomerUid, {
       sender: "admin",
       senderId: currentAdmin.uid,
       type: "text",
@@ -1286,7 +1301,7 @@ messageForm.addEventListener("submit", async (e) => {
       senderPhoto: currentAdmin.photo || null,
       timestamp: serverTimestamp()
     });
-    await touchCustomerDoc(text, text);
+    await touchCustomerDoc(text);
     bumpStat("messageCount");
     bumpStat("adminMessageCount");
   } catch (err) {
@@ -1301,7 +1316,7 @@ imageInput.addEventListener("change", async () => {
 
   try {
     const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
-    await addDoc(collection(db, ...wsPath("chats", activeCustomerUid, "messages")), {
+    await writeMessage(activeCustomerUid, {
       sender: "admin",
       senderId: currentAdmin.uid,
       type: "image",

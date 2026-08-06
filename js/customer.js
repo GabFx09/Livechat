@@ -453,28 +453,24 @@ function listenMessages() {
   });
 }
 
-async function touchCustomerDoc(lastMessage, searchableText) {
-  const update = {
-    name: currentUser.name,
-    lastMessage,
-    lastMessageAt: serverTimestamp(),
-    lastSender: "customer",
-    unreadCount: increment(1),
-    archived: false,
-    archivedAt: null,
-    expireAt: null,
-    typingDraft: null
-  };
-  if (searchableText) {
-    update.searchText = arrayUnion(searchableText);
-  }
-  await setDoc(doc(db, ...wsPath("customers", currentUser.uid)), update, { merge: true });
+async function touchCustomerDoc(lastMessage) {
+  await setDoc(
+    doc(db, ...wsPath("customers", currentUser.uid)),
+    {
+      name: currentUser.name,
+      lastMessage,
+      lastMessageAt: serverTimestamp(),
+      lastSender: "customer",
+      unreadCount: increment(1),
+      archived: false,
+      archivedAt: null,
+      expireAt: null,
+      typingDraft: null
+    },
+    { merge: true }
+  );
 }
 
-// Pesan auto-greeting/menu-pilihan/balasan-otomatis ditulis langsung ke
-// chats/.../messages (bukan lewat touchCustomerDoc), jadi tanpa ini isinya
-// tidak pernah kecatat ke searchText -> admin nyari kata yang cuma ada di
-// pesan bot (mis. "Selamat" dari sapaan) hasilnya kosong terus.
 function indexSearchText(text) {
   if (!text || !currentUser) return;
   setDoc(
@@ -482,6 +478,18 @@ function indexSearchText(text) {
     { searchText: arrayUnion(text) },
     { merge: true }
   ).catch(() => {});
+}
+
+// SATU-SATUNYA titik yang boleh addDoc ke chats/{uid}/messages, dipakai baik
+// buat pesan customer beneran maupun pesan bot (sapaan/menu/balasan
+// otomatis). Kalau messageData ada field `text`, otomatis ikut terindeks ke
+// searchText -- jadi nambah jenis pesan baru nanti tidak akan lagi
+// kelewatan diindeks kayak yang sempat kejadian di fitur auto-chat
+// (searchText cuma keisi lewat touchCustomerDoc, padahal pesan bot tidak
+// pernah lewat situ).
+async function writeMessage(uid, messageData) {
+  await addDoc(collection(db, ...wsPath("chats", uid, "messages")), messageData);
+  if (messageData.text) indexSearchText(messageData.text);
 }
 
 // Kirim draf ketikan customer ke admin secara real-time (di-debounce supaya
@@ -511,7 +519,7 @@ async function sendTextMessage(text) {
   if (!text || !currentUser || !sessionActive) return;
 
   try {
-    await addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
+    await writeMessage(currentUser.uid, {
       sender: "customer",
       type: "text",
       text,
@@ -524,7 +532,7 @@ async function sendTextMessage(text) {
   }
 
   try {
-    await touchCustomerDoc(text, text);
+    await touchCustomerDoc(text);
   } catch (err) {
     console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
     alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
@@ -547,7 +555,7 @@ async function selectOption(opt) {
 
   setTimeout(() => {
     if (!currentUser || !sessionActive) return;
-    addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
+    writeMessage(currentUser.uid, {
       sender: "admin",
       type: "text",
       text: reply,
@@ -555,7 +563,6 @@ async function selectOption(opt) {
       autoReply: true,
       timestamp: serverTimestamp()
     }).catch(() => {});
-    indexSearchText(reply);
   }, 800);
 }
 
@@ -574,7 +581,7 @@ imageInput.addEventListener("change", async () => {
 
   try {
     const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
-    await addDoc(collection(db, ...wsPath("chats", currentUser.uid, "messages")), {
+    await writeMessage(currentUser.uid, {
       sender: "customer",
       type: "image",
       imageBase64: dataUrl,
@@ -625,21 +632,20 @@ startBtn.addEventListener("click", async () => {
 
     if (isNewCustomer && autoGreetingEnabled) {
       if (autoGreetingMessage) {
-        addDoc(collection(db, ...wsPath("chats", user.uid, "messages")), {
+        writeMessage(user.uid, {
           sender: "admin",
           type: "text",
           text: autoGreetingMessage,
           timestamp: serverTimestamp(),
           autoGreeting: true
         }).catch(() => {});
-        indexSearchText(autoGreetingMessage);
       }
 
       // Menyusul sapaan dengan jeda singkat (kesan "bot lagi ngetik"),
       // supaya tidak numpuk 2 pesan dalam 1 detik yang sama.
       if (autoGreetingOptions.length > 0) {
         setTimeout(() => {
-          addDoc(collection(db, ...wsPath("chats", user.uid, "messages")), {
+          writeMessage(user.uid, {
             sender: "admin",
             type: "options",
             options: autoGreetingOptions,
