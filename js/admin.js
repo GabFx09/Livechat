@@ -231,11 +231,46 @@ function playNotificationSound() {
   });
 }
 
+// Belum bisa kirim email/push notification beneran tanpa Cloud Functions
+// (Blaze plan), tapi selama tab admin masih kebuka (walau di-minimize/pindah
+// tab lain), Notification API browser tetap bisa munculin popup OS -- lebih
+// kuat dari sekadar judul tab berkedip yang sudah ada.
+let notificationPermissionRequested = false;
+function requestNotificationPermission() {
+  if (!currentAdmin || notificationPermissionRequested) return;
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  notificationPermissionRequested = true;
+  Notification.requestPermission();
+}
+
+function showDesktopNotification(names) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  // Tab lagi kebuka & difokus -> admin sudah pasti lihat chat-nya langsung,
+  // popup OS di sini cuma bakal ganggu.
+  if (document.visibilityState === "visible" && document.hasFocus()) return;
+
+  const title = names.length === 1 ? `Pesan baru dari ${names[0]}` : `Pesan baru dari ${names.length} customer`;
+  const body =
+    names.length <= 3 ? names.join(", ") : names.slice(0, 3).join(", ") + `, +${names.length - 3} lagi`;
+
+  let notif;
+  try {
+    notif = new Notification(title, { body, tag: "livechat-new-message" });
+  } catch (err) {
+    return; // beberapa browser (mis. sebagian mobile) tidak support constructor ini
+  }
+  notif.onclick = () => {
+    window.focus();
+    notif.close();
+  };
+}
+
 // Browser mengunci audio sampai ada interaksi pengguna. Selain saat klik
 // tombol "Masuk", kita juga buka lewat interaksi pertama apa pun di halaman
 // (penting untuk kasus admin sudah otomatis login lewat sesi tersimpan).
 function unlockAudioOnFirstInteraction() {
   ensureAudio();
+  requestNotificationPermission();
 }
 document.addEventListener("click", unlockAudioOnFirstInteraction);
 document.addEventListener("keydown", unlockAudioOnFirstInteraction);
@@ -715,6 +750,7 @@ function listenCustomers() {
   const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"));
   onSnapshot(q, (snap) => {
     let shouldPlaySound = false;
+    const newMessageNames = [];
     customersDataMap.clear();
 
     snap.forEach((docSnap) => {
@@ -729,11 +765,15 @@ function listenCustomers() {
 
       if (customersInitialLoadDone && !data.archived && waiting && newMillis > (prevMillis || 0)) {
         shouldPlaySound = true;
+        newMessageNames.push(data.name);
       }
       lastKnownTimestamps.set(uid, newMillis);
     });
 
-    if (shouldPlaySound) playNotificationSound();
+    if (shouldPlaySound) {
+      playNotificationSound();
+      showDesktopNotification(newMessageNames);
+    }
     customersInitialLoadDone = true;
 
     renderCustomerList();

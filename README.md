@@ -149,6 +149,7 @@ Cara kerjanya:
 ## Fitur
 
 - **Suara notifikasi admin**: dashboard admin berbunyi otomatis saat ada pesan baru dari customer (hanya pesan yang datang setelah admin login).
+- **Notifikasi desktop**: browser akan minta izin notifikasi begitu admin klik/ketik pertama kali setelah login. Kalau diizinkan, popup notifikasi OS muncul untuk pesan baru selama tab admin masih kebuka (walau di-minimize/pindah tab) — tidak muncul kalau tab sedang aktif & difokus. Ini bukan push notification asli (butuh Cloud Functions/Blaze), jadi tetap tidak jalan kalau tab/browser-nya benar-benar ditutup.
 - **Pengaturan admin**: klik ⚙ di rail kiri sidebar (paling bawah) untuk buka panel Pengaturan. Ada 3 tab:
   - **Profil**: ganti nama tampilan & foto profil admin, muncul di tiap balasan ke customer.
   - **Appearance**: atur nama brand, warna tema, dan ikon bubble yang tampil di widget chat website perusahaan — begitu disimpan, otomatis ikut berubah di widget (`js/widget.js`) tanpa perlu edit ulang snippet, dan juga ikut mewarnai halaman chat customer.
