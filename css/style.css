@@ -1303,6 +1303,22 @@ button, a, input, textarea {
   transform: scale(0.97);
 }
 
+.option-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.option-btn:disabled:hover {
+  background: transparent;
+}
+
+.option-limit-hint {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 /* Versi read-only dipakai di tampilan admin & arsip riwayat -- bukan
    tombol beneran, cuma nunjukin pilihan apa yang ditawarkan ke customer. */
 .option-tag {
@@ -1589,6 +1605,19 @@ button, a, input, textarea {
   max-width: 100%;
   max-height: 100%;
   border-radius: 8px;
+}
+
+.image-confirm-card {
+  max-width: 420px;
+}
+
+.image-confirm-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 50vh;
+  margin: 14px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
 }
 
 .modal-card {

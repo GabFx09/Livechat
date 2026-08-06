@@ -31,7 +31,7 @@ import {
   ReCaptchaV3Provider
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
-import { compressImageFile, showImageLightbox } from "./image-utils.js";
+import { compressImageFile, showImageLightbox, showImageSendConfirm } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
 import { parseAutochatOptions, formatAutochatOptionsForTextarea } from "./autochat-utils.js";
 import { formatDurationShort } from "./format-utils.js";
@@ -1444,9 +1444,36 @@ messageForm.addEventListener("submit", async (e) => {
 async function sendImageFile(file) {
   if (!file || !activeCustomerUid) return;
 
+  // Ditangkap di awal supaya kalau admin sempat pindah ke chat lain sementara
+  // dialog konfirmasi masih terbuka, gambarnya tetap terkirim ke customer
+  // yang dituju semula -- bukan ke chat yang lagi aktif pas tombol Kirim
+  // diklik.
+  const targetUid = activeCustomerUid;
+
+  let dataUrl;
   try {
-    const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
-    await writeMessage(activeCustomerUid, {
+    dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
+  } catch (err) {
+    alert(err.message || "Gagal memproses gambar.");
+    return;
+  }
+
+  // Kasih preview dulu sebelum beneran kekirim ke chat -- jangan langsung
+  // nyelonong begitu file dipilih/di-paste, admin bisa batal.
+  const confirmed = await showImageSendConfirm(dataUrl);
+  if (!confirmed) return;
+
+  // Dialognya bisa terbuka cukup lama -- kalau admin sempat pindah ke chat
+  // lain sebelum klik Kirim, batalkan daripada nyasar terkirim ke customer
+  // yang salah (touchCustomerDoc() di bawah cuma tahu activeCustomerUid
+  // saat ini, bukan target semula).
+  if (activeCustomerUid !== targetUid) {
+    alert("Chat aktif sudah berpindah, gambar tidak dikirim. Silakan kirim ulang.");
+    return;
+  }
+
+  try {
+    await writeMessage(targetUid, {
       sender: "admin",
       senderId: currentAdmin.uid,
       type: "image",
@@ -1455,7 +1482,7 @@ async function sendImageFile(file) {
       senderPhoto: currentAdmin.photo || null,
       timestamp: serverTimestamp()
     });
-    recordFirstResponseIfNeeded(activeCustomerUid);
+    recordFirstResponseIfNeeded(targetUid);
     await touchCustomerDoc("📷 Gambar");
     bumpStat("messageCount");
     bumpStat("adminMessageCount");

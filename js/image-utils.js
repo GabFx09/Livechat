@@ -67,3 +67,62 @@ export function showImageLightbox(dataUrl) {
   overlay.addEventListener("click", () => overlay.remove());
   document.body.appendChild(overlay);
 }
+
+// Dipakai sebelum gambar (dari klik ikon 🖼️ ATAU paste Ctrl+V) beneran
+// terkirim -- kasih kesempatan lihat dulu & batal, jangan langsung nyelonong
+// ke chat begitu file dipilih/di-paste. Dibikin dinamis (bukan markup statis
+// di HTML) sama seperti showImageLightbox di atas, supaya tidak perlu
+// diduplikasi ke index.html/404.html/admin.html sekaligus.
+export function showImageSendConfirm(dataUrl) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+
+    const card = document.createElement("div");
+    card.className = "modal-card image-confirm-card";
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Kirim gambar ini?";
+    card.appendChild(heading);
+
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    img.className = "image-confirm-preview";
+    card.appendChild(img);
+
+    const actions = document.createElement("div");
+    actions.className = "modal-actions";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn-secondary";
+    cancelBtn.textContent = "Batal";
+
+    const sendBtn = document.createElement("button");
+    sendBtn.type = "button";
+    sendBtn.textContent = "Kirim";
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(sendBtn);
+    card.appendChild(actions);
+    overlay.appendChild(card);
+
+    function close(result) {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeydown);
+      resolve(result);
+    }
+    function onKeydown(e) {
+      if (e.key === "Escape") close(false);
+    }
+
+    cancelBtn.addEventListener("click", () => close(false));
+    sendBtn.addEventListener("click", () => close(true));
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close(false);
+    });
+    document.addEventListener("keydown", onKeydown);
+
+    document.body.appendChild(overlay);
+  });
+}

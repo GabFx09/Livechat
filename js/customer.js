@@ -23,7 +23,7 @@ import {
   ReCaptchaV3Provider
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
-import { compressImageFile, showImageLightbox } from "./image-utils.js";
+import { compressImageFile, showImageLightbox, showImageSendConfirm } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
 import { isWithinBusinessHours } from "./hours-utils.js";
 
@@ -280,6 +280,8 @@ function renderMessage(m) {
     p.textContent = m.text || "Silakan pilih salah satu:";
     div.appendChild(p);
 
+    const limitReached = optionSelectCount >= OPTION_SELECT_LIMIT;
+
     const optWrap = document.createElement("div");
     optWrap.className = "option-buttons";
     m.options.forEach((opt) => {
@@ -287,10 +289,18 @@ function renderMessage(m) {
       btn.type = "button";
       btn.className = "option-btn";
       btn.textContent = opt;
+      btn.disabled = limitReached;
       btn.addEventListener("click", () => selectOption(opt));
       optWrap.appendChild(btn);
     });
     div.appendChild(optWrap);
+
+    if (limitReached) {
+      const hint = document.createElement("p");
+      hint.className = "option-limit-hint";
+      hint.textContent = "Batas pemilihan menu bantuan tercapai. Ketik pesan langsung untuk melanjutkan.";
+      div.appendChild(hint);
+    }
   } else {
     const p = document.createElement("p");
     renderTextWithLinks(p, m.text || "");
@@ -538,11 +548,30 @@ async function sendTextMessage(text) {
   bumpStat("customerMessageCount");
 }
 
+// Customer cuma boleh pakai tombol pilihan bantuan maksimal 2x per sesi chat
+// (supaya tidak dipakai spam auto-reply berulang-ulang) -- dihitung dari
+// field optionSelectCount di dokumen customers/{uid}, jadi batasnya tetap
+// berlaku walau halaman di-reload, bukan cuma variabel in-memory.
+const OPTION_SELECT_LIMIT = 2;
+let optionSelectCount = 0;
+
 // Diklik dari tombol pilihan bantuan (lihat renderMessage type "options").
 // Kirim pilihannya sebagai pesan customer biasa dulu, lalu kalau admin sudah
 // nyetel balasan otomatis buat pilihan itu (Pengaturan > Auto-Chat), susulkan
 // balasannya dengan jeda singkat.
 async function selectOption(opt) {
+  if (!currentUser || !sessionActive || optionSelectCount >= OPTION_SELECT_LIMIT) return;
+
+  // Dinaikkan duluan secara synchronous (sebelum await apa pun) supaya
+  // klik ganda yang nyaris bersamaan tidak bisa dua-duanya lolos dari guard
+  // di atas.
+  optionSelectCount++;
+  setDoc(
+    doc(db, ...wsPath("customers", currentUser.uid)),
+    { optionSelectCount: increment(1) },
+    { merge: true }
+  ).catch(() => {});
+
   await sendTextMessage(opt);
 
   const reply = autoGreetingOptionReplies[opt];
@@ -574,8 +603,20 @@ messageForm.addEventListener("submit", async (e) => {
 async function sendImageFile(file) {
   if (!file || !currentUser || !sessionActive) return;
 
+  let dataUrl;
   try {
-    const dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
+    dataUrl = await compressImageFile(file, { maxDimension: 1200, maxDataUrlLength: 700000 });
+  } catch (err) {
+    alert(err.message || "Gagal memproses gambar.");
+    return;
+  }
+
+  // Kasih preview dulu sebelum beneran kekirim ke chat -- jangan langsung
+  // nyelonong begitu file dipilih/di-paste, customer bisa batal.
+  const confirmed = await showImageSendConfirm(dataUrl);
+  if (!confirmed || !sessionActive) return;
+
+  try {
     await writeMessage(currentUser.uid, {
       sender: "customer",
       type: "image",
@@ -694,6 +735,7 @@ startBtn.addEventListener("click", async () => {
     const user = await ensureSignedIn();
     const existingSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     const isNewCustomer = !existingSnap.exists();
+    optionSelectCount = isNewCustomer ? 0 : existingSnap.data().optionSelectCount || 0;
 
     const initialUpdate = {
       name,
@@ -784,6 +826,7 @@ async function init() {
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
     const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     if (customerSnap.exists() && customerSnap.data().name) {
+      optionSelectCount = customerSnap.data().optionSelectCount || 0;
       enterChat(user.uid, customerSnap.data().name);
       captureVisitorInfo(user.uid);
     } else {
