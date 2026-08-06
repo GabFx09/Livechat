@@ -1,0 +1,13 @@
+{
+  "name": "livechat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/text-utils.test.js test/autochat-utils.test.js test/hours-utils.test.js test/format-utils.test.js",
+    "test:rules": "npx firebase-tools emulators:exec --only firestore \"node --test test/rules/firestore.rules.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^11.10.0"
+  }
+}

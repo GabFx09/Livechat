@@ -172,6 +172,33 @@ Cara kerjanya:
 - **Link per menu**: tiap menu di rail kiri admin punya URL sendiri lewat hash (`#/open`, `#/all`, `#/archived`, `#/stats`, `#/settings`) — mis. `admin.html#/settings` langsung membuka panel Pengaturan, `admin.html#/stats` langsung membuka Statistik. Bisa di-refresh/bookmark/share, dan tombol back/forward browser juga berfungsi untuk pindah antar menu.
 - **Live typing preview (admin saja)**: saat customer sedang mengetik, admin bisa lihat draf ketikannya secara real-time (bukan cuma indikator "sedang mengetik") di atas kolom balas. Draf otomatis hilang begitu customer kirim pesan atau menghapus semua ketikannya. Catatan: ini fitur umum di tool livechat (LiveChat, Intercom, dll), tapi berarti admin melihat teks sebelum customer sempat membatalkan/menghapusnya — pertimbangkan untuk diinformasikan ke customer kalau relevan untuk kebijakan privasi Anda.
 
+## Testing
+
+Situs ini tetap statis murni tanpa build step untuk deploy — tapi ada `package.json` + `test/` khusus buat development, dijalankan lokal lewat Node, tidak ikut ke-deploy ke GitHub Pages.
+
+```bash
+npm install   # sekali saja, install devDependencies
+npm test      # unit test logika murni (parsing, format tanggal/durasi, deteksi link, jam operasional)
+```
+
+`npm test` pakai test runner bawaan Node (`node --test`), tanpa dependency tambahan buat unit test-nya sendiri — cuma `@firebase/rules-unit-testing` + `firebase` yang jadi devDependency, khusus buat test rules di bawah.
+
+Fungsi-fungsi logika murni (tidak nyentuh DOM/Firebase) dipisah ke modul sendiri supaya gampang dites: `js/text-utils.js` (deteksi & linkify URL), `js/autochat-utils.js` (parsing textarea Auto-Chat), `js/hours-utils.js` (evaluasi jam operasional), `js/format-utils.js` (format durasi). Semuanya di-import balik oleh `admin.js`/`customer.js`, jadi bukan kode terpisah yang sengaja diduplikasi buat testing.
+
+### Test Firestore rules (butuh Firestore Emulator)
+
+```bash
+npm run test:rules
+```
+
+Menjalankan `firestore.rules` lewat Firestore Emulator (auto-start via `firebase emulators:exec`) dan memverifikasi 36 skenario: isolasi antar workspace, siapa boleh baca/tulis/hapus apa, rate limit anti-spam, batas panjang pesan, dan yang paling penting — semua rule anti-spoofing berbasis `get()`/`exists()` buat sapaan/menu pilihan/balasan otomatis (memastikan customer tidak bisa menyamar jadi "admin" dengan teks bebas).
+
+**Butuh Java Runtime** (dipakai Firestore Emulator, bukan bagian dari app-nya sendiri). Kalau belum ada:
+```powershell
+winget install --id EclipseAdoptium.Temurin.21.JRE -e
+```
+Lalu buka terminal baru (supaya PATH ke-refresh) sebelum jalankan `npm run test:rules`.
+
 ## Catatan keamanan & isolasi data antar perusahaan
 
 - Setiap workspace terisolasi lewat Firestore rules: admin workspace A tidak bisa membaca/menulis data workspace B sama sekali (dicek lewat `exists(workspaces/{id}/admins/{uid})` yang scoped ke `workspaceId` masing-masing).

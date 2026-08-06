@@ -33,6 +33,8 @@ import {
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
+import { parseAutochatOptions, formatAutochatOptionsForTextarea } from "./autochat-utils.js";
+import { formatDurationShort } from "./format-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -560,16 +562,6 @@ function formatShortDateWIB(dateKey) {
   const [y, m, d] = dateKey.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "UTC" });
-}
-
-function formatDurationShort(ms) {
-  const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return totalSeconds + " dtk";
-  const totalMinutes = Math.round(totalSeconds / 60);
-  if (totalMinutes < 60) return totalMinutes + " mnt";
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours + " jam" + (minutes ? " " + minutes + " mnt" : "");
 }
 
 async function openStats() {
@@ -1667,12 +1659,10 @@ function openAutochatSettings() {
   appScreen.classList.add("hidden");
   autochatEnabledInput.checked = !!currentAdmin.autoGreetingEnabled;
   autochatMessageInput.value = currentAdmin.autoGreetingMessage || "";
-  autochatOptionsInput.value = (currentAdmin.autoGreetingOptions || [])
-    .map((label) => {
-      const reply = (currentAdmin.autoGreetingOptionReplies || {})[label];
-      return reply ? `${label} :: ${reply}` : label;
-    })
-    .join("\n");
+  autochatOptionsInput.value = formatAutochatOptionsForTextarea(
+    currentAdmin.autoGreetingOptions,
+    currentAdmin.autoGreetingOptionReplies
+  );
   autochatError.classList.add("hidden");
   settingsAutochatView.classList.remove("hidden");
 }
@@ -1923,30 +1913,6 @@ appearanceSaveBtn.addEventListener("click", async () => {
     appearanceSaveBtn.disabled = false;
   }
 });
-
-// Tiap baris di textarea Pilihan Bantuan boleh format "Label" saja (tombol
-// polos) atau "Label :: Balasan" (tombol yang begitu diklik dapat balasan
-// otomatis). Dipisah pas titik dua ganda PERTAMA saja, biar balasan yang
-// isinya "::" lagi di tengah kalimat tidak ikut kepotong.
-function parseAutochatOptions(raw) {
-  const options = [];
-  const optionReplies = {};
-  raw.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    const sepIndex = trimmed.indexOf("::");
-    if (sepIndex === -1) {
-      options.push(trimmed);
-      return;
-    }
-    const label = trimmed.slice(0, sepIndex).trim();
-    const reply = trimmed.slice(sepIndex + 2).trim();
-    if (!label) return;
-    options.push(label);
-    if (reply) optionReplies[label] = reply;
-  });
-  return { options, optionReplies };
-}
 
 autochatSaveBtn.addEventListener("click", async () => {
   const enabled = autochatEnabledInput.checked;

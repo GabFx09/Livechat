@@ -25,6 +25,7 @@ import {
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
+import { isWithinBusinessHours } from "./hours-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -147,32 +148,6 @@ function applyBrandName(name) {
 function applyThemeColor(hex) {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
   document.documentElement.style.setProperty("--accent", hex);
-}
-
-// Jam operasional selalu dievaluasi di WIB, sama kayak seluruh format
-// tanggal/jam lain di app ini (lihat formatTimeWIB/formatDateWIB).
-const WIB_DAY_CODES = { Mon: "mon", Tue: "tue", Wed: "wed", Thu: "thu", Fri: "fri", Sat: "sat", Sun: "sun" };
-
-function isWithinBusinessHours(bh) {
-  if (!bh || !bh.enabled) return true;
-  const days = Array.isArray(bh.days) ? bh.days : [];
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Jakarta",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).formatToParts(new Date());
-  const get = (type) => parts.find((p) => p.type === type).value;
-
-  const today = WIB_DAY_CODES[get("weekday")];
-  if (!days.includes(today)) return false;
-
-  const nowMinutes = parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
-  const [startH, startM] = (bh.start || "00:00").split(":").map(Number);
-  const [endH, endM] = (bh.end || "23:59").split(":").map(Number);
-  return nowMinutes >= startH * 60 + startM && nowMinutes < endH * 60 + endM;
 }
 
 function updateOfflineBanners() {
