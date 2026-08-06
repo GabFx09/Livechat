@@ -105,6 +105,24 @@ function bumpStat(field) {
   setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(1) }, { merge: true }).catch(() => {});
 }
 
+function bumpStatBy(field, amount) {
+  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(amount) }, { merge: true }).catch(() => {});
+}
+
+// Dipanggil tiap admin kirim balasan. Kalau ini balasan PERTAMA buat
+// percakapan ybs (customer doc belum punya firstResponseAt, tapi sudah
+// punya firstCustomerMessageAt dari sesi customer.js), catat selisih
+// waktunya ke stats harian buat kartu "Respon Pertama" di dashboard.
+function recordFirstResponseIfNeeded(uid) {
+  const data = customersDataMap.get(uid);
+  if (!data || !data.firstCustomerMessageAt || data.firstResponseAt) return;
+  const deltaMs = Date.now() - data.firstCustomerMessageAt.toMillis();
+  if (deltaMs < 0) return;
+  setDoc(doc(db, ...wsPath("customers", uid)), { firstResponseAt: serverTimestamp() }, { merge: true }).catch(() => {});
+  bumpStatBy("firstResponseTotalMs", deltaMs);
+  bumpStat("firstResponseCount");
+}
+
 const loadingScreen = document.getElementById("loading-screen");
 const loginScreen = document.getElementById("login-screen");
 const appScreen = document.getElementById("app-screen");
@@ -190,6 +208,9 @@ const statsYesterdayCount = document.getElementById("stats-yesterday-count");
 const statsTodayNewCustomers = document.getElementById("stats-today-new-customers");
 const statsTotalCustomers = document.getElementById("stats-total-customers");
 const statsOpenCustomers = document.getElementById("stats-open-customers");
+const statsResponseTime = document.getElementById("stats-response-time");
+const statsRating = document.getElementById("stats-rating");
+const statsRatingCount = document.getElementById("stats-rating-count");
 const statsDeltaEl = document.getElementById("stats-delta");
 const statsChartEl = document.getElementById("stats-chart");
 const statsChartTotal = document.getElementById("stats-chart-total");
@@ -541,6 +562,16 @@ function formatShortDateWIB(dateKey) {
   return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
+function formatDurationShort(ms) {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return totalSeconds + " dtk";
+  const totalMinutes = Math.round(totalSeconds / 60);
+  if (totalMinutes < 60) return totalMinutes + " mnt";
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours + " jam" + (minutes ? " " + minutes + " mnt" : "");
+}
+
 async function openStats() {
   appScreen.classList.add("hidden");
   statsView.classList.remove("hidden");
@@ -576,6 +607,21 @@ async function openStats() {
   } catch (err) {
     console.error("Gagal memuat statistik:", err);
   }
+
+  let firstResponseTotalMs = 0;
+  let firstResponseCount = 0;
+  let ratingTotal = 0;
+  let ratingCount = 0;
+  byDate.forEach((data) => {
+    firstResponseTotalMs += data.firstResponseTotalMs || 0;
+    firstResponseCount += data.firstResponseCount || 0;
+    ratingTotal += data.ratingTotal || 0;
+    ratingCount += data.ratingCount || 0;
+  });
+  statsResponseTime.textContent =
+    firstResponseCount > 0 ? formatDurationShort(firstResponseTotalMs / firstResponseCount) : "-";
+  statsRating.textContent = ratingCount > 0 ? (ratingTotal / ratingCount).toFixed(1) + " ⭐" : "-";
+  statsRatingCount.textContent = String(ratingCount);
 
   const days = [];
   for (let i = DAYS - 1; i >= 0; i--) {
@@ -1392,6 +1438,7 @@ messageForm.addEventListener("submit", async (e) => {
       senderPhoto: currentAdmin.photo || null,
       timestamp: serverTimestamp()
     });
+    recordFirstResponseIfNeeded(activeCustomerUid);
     await touchCustomerDoc(text);
     bumpStat("messageCount");
     bumpStat("adminMessageCount");
@@ -1416,6 +1463,7 @@ imageInput.addEventListener("change", async () => {
       senderPhoto: currentAdmin.photo || null,
       timestamp: serverTimestamp()
     });
+    recordFirstResponseIfNeeded(activeCustomerUid);
     await touchCustomerDoc("📷 Gambar");
     bumpStat("messageCount");
     bumpStat("adminMessageCount");

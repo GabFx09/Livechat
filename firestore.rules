@@ -179,20 +179,25 @@ service cloud.firestore {
 
       // stats/{YYYY-MM-DD} = counter harian untuk dashboard statistik admin.
       // Customer & admin sama-sama boleh menambah counter (efek samping wajar
-      // dari kirim pesan/mulai chat), tapi cuma admin yang boleh membacanya,
-      // dan field yang boleh disentuh dibatasi ke 4 counter yang dikenal.
+      // dari kirim pesan/mulai chat/kasih rating), tapi cuma admin yang boleh
+      // membacanya, dan field yang boleh disentuh dibatasi ke yang dikenal.
+      // firstResponseTotalMs/firstResponseCount dipakai kartu "Respon
+      // Pertama", ratingTotal/ratingCount dipakai kartu "Rating Kepuasan" --
+      // keduanya rata-rata = total/count, dihitung di admin.js pas nampilin.
       match /stats/{date} {
         allow read: if isWorkspaceAdmin();
 
         allow create: if request.auth != null &&
-          request.resource.data.keys().hasOnly(
-            ['messageCount', 'customerMessageCount', 'adminMessageCount', 'newCustomers']
-          );
+          request.resource.data.keys().hasOnly([
+            'messageCount', 'customerMessageCount', 'adminMessageCount', 'newCustomers',
+            'firstResponseTotalMs', 'firstResponseCount', 'ratingTotal', 'ratingCount'
+          ]);
 
         allow update: if request.auth != null &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-            ['messageCount', 'customerMessageCount', 'adminMessageCount', 'newCustomers']
-          );
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'messageCount', 'customerMessageCount', 'adminMessageCount', 'newCustomers',
+            'firstResponseTotalMs', 'firstResponseCount', 'ratingTotal', 'ratingCount'
+          ]);
 
         allow delete: if false;
       }

@@ -85,6 +85,12 @@ const imageInput = document.getElementById("image-input");
 const sessionEndedBanner = document.getElementById("session-ended-banner");
 const hoursOfflineBanner = document.getElementById("hours-offline-banner");
 const hoursOfflineBannerLogin = document.getElementById("hours-offline-banner-login");
+const ratingOverlay = document.getElementById("rating-overlay");
+const ratingStars = document.querySelectorAll(".rating-star");
+const ratingCommentInput = document.getElementById("rating-comment-input");
+const ratingCancelBtn = document.getElementById("rating-cancel-btn");
+const ratingSubmitBtn = document.getElementById("rating-submit-btn");
+const ratingThanks = document.getElementById("rating-thanks");
 const brandNameEls = document.querySelectorAll("[data-brand-name]");
 
 function wsPath(...segments) {
@@ -106,6 +112,10 @@ function todayKeyWIB() {
 
 function bumpStat(field) {
   setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(1) }, { merge: true }).catch(() => {});
+}
+
+function bumpStatBy(field, amount) {
+  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(amount) }, { merge: true }).catch(() => {});
 }
 
 // Satu-satunya titik yang boleh memicu signInAnonymously, supaya init() (yang
@@ -331,8 +341,18 @@ function updateChatHeader() {
     chatHeader.appendChild(avatar);
   }
   const span = document.createElement("span");
+  span.className = "chat-header-title";
   span.textContent = (knownAdminInfo && knownAdminInfo.name) || workspaceBrandName || "Customer Service";
   chatHeader.appendChild(span);
+
+  const ratingBtn = document.createElement("button");
+  ratingBtn.type = "button";
+  ratingBtn.id = "rating-btn";
+  ratingBtn.className = "header-icon-btn";
+  ratingBtn.title = "Beri Rating";
+  ratingBtn.textContent = "⭐";
+  ratingBtn.addEventListener("click", openRatingOverlay);
+  chatHeader.appendChild(ratingBtn);
 }
 
 function enterChat(uid, name) {
@@ -595,6 +615,69 @@ imageInput.addEventListener("change", async () => {
   }
 });
 
+// --- Rating kepuasan (opsional, bisa dikirim kapan saja lewat ikon ⭐ di
+// header chat, tidak terikat "akhiri chat" karena app ini tidak punya
+// konsep sesi ditutup formal). ---
+
+let selectedRating = 0;
+
+function setRatingStars(upTo) {
+  ratingStars.forEach((s) => {
+    s.classList.toggle("active", parseInt(s.dataset.value, 10) <= upTo);
+  });
+}
+
+function openRatingOverlay() {
+  if (!currentUser) return;
+  selectedRating = 0;
+  setRatingStars(0);
+  ratingCommentInput.value = "";
+  ratingCommentInput.classList.remove("hidden");
+  document.getElementById("rating-stars").classList.remove("hidden");
+  ratingSubmitBtn.classList.remove("hidden");
+  ratingThanks.classList.add("hidden");
+  ratingOverlay.classList.remove("hidden");
+}
+
+ratingStars.forEach((star) => {
+  const value = parseInt(star.dataset.value, 10);
+  star.addEventListener("mouseenter", () => setRatingStars(value));
+  star.addEventListener("mouseleave", () => setRatingStars(selectedRating));
+  star.addEventListener("click", () => {
+    selectedRating = value;
+    setRatingStars(value);
+  });
+});
+
+ratingCancelBtn.addEventListener("click", () => ratingOverlay.classList.add("hidden"));
+ratingOverlay.addEventListener("click", (e) => {
+  if (e.target === ratingOverlay) ratingOverlay.classList.add("hidden");
+});
+
+ratingSubmitBtn.addEventListener("click", async () => {
+  if (!selectedRating || !currentUser) return;
+  ratingSubmitBtn.disabled = true;
+  try {
+    await setDoc(
+      doc(db, ...wsPath("customers", currentUser.uid)),
+      { rating: selectedRating, ratingComment: ratingCommentInput.value.trim(), ratedAt: serverTimestamp() },
+      { merge: true }
+    );
+    bumpStatBy("ratingTotal", selectedRating);
+    bumpStat("ratingCount");
+
+    ratingThanks.classList.remove("hidden");
+    ratingSubmitBtn.classList.add("hidden");
+    document.getElementById("rating-stars").classList.add("hidden");
+    ratingCommentInput.classList.add("hidden");
+    setTimeout(() => ratingOverlay.classList.add("hidden"), 1800);
+  } catch (err) {
+    alert("Gagal mengirim rating: " + err.message);
+  } finally {
+    ratingSubmitBtn.disabled = false;
+  }
+});
+
 startBtn.addEventListener("click", async () => {
   // Honeypot: field ini disembunyikan lewat CSS (bukan hidden), jadi
   // pengguna asli tidak mungkin ngisi. Kalau kesisi, diam-diam berhenti di
@@ -616,16 +699,18 @@ startBtn.addEventListener("click", async () => {
     const existingSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     const isNewCustomer = !existingSnap.exists();
 
-    await setDoc(
-      doc(db, ...wsPath("customers", user.uid)),
-      {
-        name,
-        lastMessage: "",
-        lastMessageAt: serverTimestamp(),
-        lastSender: null
-      },
-      { merge: true }
-    );
+    const initialUpdate = {
+      name,
+      lastMessage: "",
+      lastMessageAt: serverTimestamp(),
+      lastSender: null
+    };
+    // Cuma dicatat sekali di awal sesi baru -- dipakai admin.js buat hitung
+    // "waktu respon pertama" (lihat recordFirstResponseIfNeeded). Kalau
+    // customer lama, jangan sampai ke-reset dan bikin metriknya salah.
+    if (isNewCustomer) initialUpdate.firstCustomerMessageAt = serverTimestamp();
+
+    await setDoc(doc(db, ...wsPath("customers", user.uid)), initialUpdate, { merge: true });
     if (isNewCustomer) bumpStat("newCustomers");
     enterChat(user.uid, name);
     captureVisitorInfo(user.uid);
