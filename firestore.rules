@@ -42,7 +42,8 @@ service cloud.firestore {
       allow update: if isWorkspaceAdmin() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage',
-           'autoGreetingOptions', 'autoGreetingOptionReplies']
+           'autoGreetingOptions', 'autoGreetingOptionReplies', 'businessHoursEnabled',
+           'businessHoursDays', 'businessHoursStart', 'businessHoursEnd', 'offlineMessage']
         );
 
       // Dokumen admin dibuat manual lewat Firebase Console, tidak bisa

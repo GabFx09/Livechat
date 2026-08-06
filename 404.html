@@ -38,6 +38,7 @@
         <div class="auth-form-card">
           <h2>Mulai Chat</h2>
           <p class="auth-subtitle">Masukkan username Anda untuk terhubung dengan tim kami.</p>
+          <p id="hours-offline-banner-login" class="hours-offline-banner hidden"></p>
           <label class="auth-label" for="name-input">Username</label>
           <input id="name-input" type="text" placeholder="mis. budi123" maxlength="40" autocomplete="off" />
           <input id="hp-check" name="hp_check_field" type="text" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
@@ -51,6 +52,7 @@
   <section id="chat-screen" class="screen hidden">
     <div class="chat-container">
       <header id="chat-header">Customer Service</header>
+      <p id="hours-offline-banner" class="hours-offline-banner hidden"></p>
       <div id="messages"></div>
       <p id="session-ended-banner" class="session-ended-banner hidden">Sesi telah habis. Tutup tab ini dan mulai percakapan baru untuk chat lagi.</p>
       <form id="message-form">

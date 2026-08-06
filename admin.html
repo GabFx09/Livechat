@@ -103,6 +103,7 @@
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
         <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
+        <a href="#/settings/hours" class="settings-sub-nav-btn">Jam Operasional</a>
       </nav>
 
       <div class="settings-view-body">
@@ -135,6 +136,7 @@
         <a href="#/settings/appearance" class="settings-sub-nav-btn active">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
         <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
+        <a href="#/settings/hours" class="settings-sub-nav-btn">Jam Operasional</a>
       </nav>
 
       <div class="settings-view-body">
@@ -168,6 +170,7 @@
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn active">Auto-Chat</a>
         <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
+        <a href="#/settings/hours" class="settings-sub-nav-btn">Jam Operasional</a>
       </nav>
 
       <div class="settings-view-body">
@@ -201,6 +204,7 @@
         <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
         <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
         <a href="#/settings/history" class="settings-sub-nav-btn active">Riwayat</a>
+        <a href="#/settings/hours" class="settings-sub-nav-btn">Jam Operasional</a>
       </nav>
 
       <div class="settings-view-body">
@@ -208,6 +212,56 @@
           <p class="settings-hint">Jejak setiap kali chat customer dihapus lewat tombol "Hapus Semua Chat" di panel Info Customer.</p>
           <ul id="history-log-list" class="history-log-list"></ul>
           <p id="history-log-empty" class="saved-reply-empty hidden">Belum ada riwayat penghapusan.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="settings-hours-view" class="screen hidden">
+    <header class="settings-view-header">
+      <button class="header-icon-btn settings-back-btn" type="button" title="Kembali">←</button>
+      <span>Pengaturan</span>
+    </header>
+
+    <div class="settings-view-layout">
+      <nav class="settings-sub-nav">
+        <a href="#/settings/profile" class="settings-sub-nav-btn">Profil</a>
+        <a href="#/settings/appearance" class="settings-sub-nav-btn">Appearance</a>
+        <a href="#/settings/autochat" class="settings-sub-nav-btn">Auto-Chat</a>
+        <a href="#/settings/history" class="settings-sub-nav-btn">Riwayat</a>
+        <a href="#/settings/hours" class="settings-sub-nav-btn active">Jam Operasional</a>
+      </nav>
+
+      <div class="settings-view-body">
+        <div class="settings-panel">
+          <p class="settings-hint">Kalau diaktifkan, customer lihat status "sedang tidak online" di luar jam yang diatur, plus pesan penjelasan yang kamu tulis sendiri. Jam pakai zona waktu WIB, sama seperti bagian lain di dashboard ini.</p>
+          <label class="settings-checkbox-row" for="hours-enabled-input">
+            <input id="hours-enabled-input" type="checkbox" />
+            <span>Aktifkan jam operasional</span>
+          </label>
+
+          <label class="auth-label">Hari Buka</label>
+          <div class="hours-days-row">
+            <label><input type="checkbox" class="hours-day-checkbox" value="mon" /> Sen</label>
+            <label><input type="checkbox" class="hours-day-checkbox" value="tue" /> Sel</label>
+            <label><input type="checkbox" class="hours-day-checkbox" value="wed" /> Rab</label>
+            <label><input type="checkbox" class="hours-day-checkbox" value="thu" /> Kam</label>
+            <label><input type="checkbox" class="hours-day-checkbox" value="fri" /> Jum</label>
+            <label><input type="checkbox" class="hours-day-checkbox" value="sat" /> Sab</label>
+            <label><input type="checkbox" class="hours-day-checkbox" value="sun" /> Min</label>
+          </div>
+
+          <label class="auth-label" for="hours-start-input">Jam Buka - Jam Tutup (WIB)</label>
+          <div class="color-input-row">
+            <input id="hours-start-input" type="time" />
+            <input id="hours-end-input" type="time" />
+          </div>
+
+          <label class="auth-label" for="hours-offline-message-input">Pesan Saat Di Luar Jam Operasional</label>
+          <textarea id="hours-offline-message-input" rows="3" maxlength="300" placeholder="mis. Tim kami sedang tidak online. Silakan tinggalkan pesan, kami akan balas begitu online kembali."></textarea>
+
+          <button id="hours-save-btn" type="button">Simpan Jam Operasional</button>
+          <p id="hours-error" class="error hidden"></p>
         </div>
       </div>
     </div>

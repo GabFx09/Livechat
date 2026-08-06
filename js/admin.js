@@ -137,6 +137,7 @@ const settingsProfileView = document.getElementById("settings-profile-view");
 const settingsAppearanceView = document.getElementById("settings-appearance-view");
 const settingsAutochatView = document.getElementById("settings-autochat-view");
 const settingsHistoryView = document.getElementById("settings-history-view");
+const settingsHoursView = document.getElementById("settings-hours-view");
 const avatarPreview = document.getElementById("avatar-preview");
 const photoInput = document.getElementById("photo-input");
 const displayNameInput = document.getElementById("display-name-input");
@@ -163,6 +164,14 @@ const historyDetailOverlay = document.getElementById("history-detail-overlay");
 const historyDetailTitle = document.getElementById("history-detail-title");
 const historyDetailMessages = document.getElementById("history-detail-messages");
 const historyDetailCloseBtn = document.getElementById("history-detail-close-btn");
+
+const hoursEnabledInput = document.getElementById("hours-enabled-input");
+const hoursDayCheckboxes = document.querySelectorAll(".hours-day-checkbox");
+const hoursStartInput = document.getElementById("hours-start-input");
+const hoursEndInput = document.getElementById("hours-end-input");
+const hoursOfflineMessageInput = document.getElementById("hours-offline-message-input");
+const hoursSaveBtn = document.getElementById("hours-save-btn");
+const hoursError = document.getElementById("hours-error");
 
 const savedRepliesBtn = document.getElementById("saved-replies-btn");
 const savedRepliesOverlay = document.getElementById("saved-replies-overlay");
@@ -236,7 +245,8 @@ function isSettingsOpen() {
     !settingsProfileView.classList.contains("hidden") ||
     !settingsAppearanceView.classList.contains("hidden") ||
     !settingsAutochatView.classList.contains("hidden") ||
-    !settingsHistoryView.classList.contains("hidden")
+    !settingsHistoryView.classList.contains("hidden") ||
+    !settingsHoursView.classList.contains("hidden")
   );
 }
 
@@ -402,6 +412,11 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
         wsData.autoGreetingOptionReplies && typeof wsData.autoGreetingOptionReplies === "object"
           ? wsData.autoGreetingOptionReplies
           : {};
+      currentAdmin.businessHoursEnabled = !!wsData.businessHoursEnabled;
+      currentAdmin.businessHoursDays = Array.isArray(wsData.businessHoursDays) ? wsData.businessHoursDays : [];
+      currentAdmin.businessHoursStart = wsData.businessHoursStart || "09:00";
+      currentAdmin.businessHoursEnd = wsData.businessHoursEnd || "17:00";
+      currentAdmin.offlineMessage = wsData.offlineMessage || "";
       if (currentAdmin.workspaceName) document.title = currentAdmin.workspaceName + " - Admin";
     }
   } catch (err) {
@@ -1379,6 +1394,7 @@ settingsLogoutBtn.addEventListener("click", async () => {
   settingsAppearanceView.classList.add("hidden");
   settingsAutochatView.classList.add("hidden");
   settingsHistoryView.classList.add("hidden");
+  settingsHoursView.classList.add("hidden");
   savedRepliesOverlay.classList.add("hidden");
   statsView.classList.add("hidden");
   customerPanel.classList.add("hidden");
@@ -1424,6 +1440,7 @@ function applyRoute() {
   settingsAppearanceView.classList.add("hidden");
   settingsAutochatView.classList.add("hidden");
   settingsHistoryView.classList.add("hidden");
+  settingsHoursView.classList.add("hidden");
   statsView.classList.add("hidden");
 
   if (route === "settings" || route === "settings/profile") {
@@ -1440,6 +1457,10 @@ function applyRoute() {
   }
   if (route === "settings/history") {
     openHistorySettings();
+    return;
+  }
+  if (route === "settings/hours") {
+    openHoursSettings();
     return;
   }
   if (route === "stats") {
@@ -1550,6 +1571,20 @@ async function openHistorySettings() {
     historyLogEmpty.textContent = "Gagal memuat riwayat: " + err.message;
     historyLogEmpty.classList.remove("hidden");
   }
+}
+
+function openHoursSettings() {
+  appScreen.classList.add("hidden");
+  hoursEnabledInput.checked = !!currentAdmin.businessHoursEnabled;
+  const activeDays = currentAdmin.businessHoursDays || [];
+  hoursDayCheckboxes.forEach((cb) => {
+    cb.checked = activeDays.includes(cb.value);
+  });
+  hoursStartInput.value = currentAdmin.businessHoursStart || "09:00";
+  hoursEndInput.value = currentAdmin.businessHoursEnd || "17:00";
+  hoursOfflineMessageInput.value = currentAdmin.offlineMessage || "";
+  hoursError.classList.add("hidden");
+  settingsHoursView.classList.remove("hidden");
 }
 
 // Versi baca-saja dari renderMessage(), dipakai buat nampilin pesan yang
@@ -1777,6 +1812,55 @@ autochatSaveBtn.addEventListener("click", async () => {
     autochatError.classList.remove("hidden");
   } finally {
     autochatSaveBtn.disabled = false;
+  }
+});
+
+hoursSaveBtn.addEventListener("click", async () => {
+  const enabled = hoursEnabledInput.checked;
+  const days = Array.from(hoursDayCheckboxes)
+    .filter((cb) => cb.checked)
+    .map((cb) => cb.value);
+  const start = hoursStartInput.value || "09:00";
+  const end = hoursEndInput.value || "17:00";
+  const offlineMessage = hoursOfflineMessageInput.value.trim();
+
+  if (enabled && days.length === 0) {
+    hoursError.textContent = "Pilih minimal 1 hari buka sebelum mengaktifkan.";
+    hoursError.classList.remove("hidden");
+    return;
+  }
+  if (enabled && start >= end) {
+    hoursError.textContent = "Jam buka harus lebih awal dari jam tutup.";
+    hoursError.classList.remove("hidden");
+    return;
+  }
+
+  hoursSaveBtn.disabled = true;
+  hoursError.classList.add("hidden");
+
+  try {
+    await setDoc(
+      doc(db, ...wsPath()),
+      {
+        businessHoursEnabled: enabled,
+        businessHoursDays: days,
+        businessHoursStart: start,
+        businessHoursEnd: end,
+        offlineMessage
+      },
+      { merge: true }
+    );
+    currentAdmin.businessHoursEnabled = enabled;
+    currentAdmin.businessHoursDays = days;
+    currentAdmin.businessHoursStart = start;
+    currentAdmin.businessHoursEnd = end;
+    currentAdmin.offlineMessage = offlineMessage;
+    navigateTo("open");
+  } catch (err) {
+    hoursError.textContent = "Gagal menyimpan: " + err.message;
+    hoursError.classList.remove("hidden");
+  } finally {
+    hoursSaveBtn.disabled = false;
   }
 });
 

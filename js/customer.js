@@ -63,6 +63,7 @@ let autoGreetingEnabled = false;
 let autoGreetingMessage = "";
 let autoGreetingOptions = [];
 let autoGreetingOptionReplies = {};
+let businessHours = null; // { enabled, days, start, end, offlineMessage } | null = fitur nonaktif
 let sessionActive = false; // false = belum chat, atau sesi dihapus admin & belum mulai ulang
 let unsubMessages = null;
 let unsubCustomerDoc = null;
@@ -82,6 +83,8 @@ const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
 const sessionEndedBanner = document.getElementById("session-ended-banner");
+const hoursOfflineBanner = document.getElementById("hours-offline-banner");
+const hoursOfflineBannerLogin = document.getElementById("hours-offline-banner-login");
 const brandNameEls = document.querySelectorAll("[data-brand-name]");
 
 function wsPath(...segments) {
@@ -134,6 +137,48 @@ function applyBrandName(name) {
 function applyThemeColor(hex) {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
   document.documentElement.style.setProperty("--accent", hex);
+}
+
+// Jam operasional selalu dievaluasi di WIB, sama kayak seluruh format
+// tanggal/jam lain di app ini (lihat formatTimeWIB/formatDateWIB).
+const WIB_DAY_CODES = { Mon: "mon", Tue: "tue", Wed: "wed", Thu: "thu", Fri: "fri", Sat: "sat", Sun: "sun" };
+
+function isWithinBusinessHours(bh) {
+  if (!bh || !bh.enabled) return true;
+  const days = Array.isArray(bh.days) ? bh.days : [];
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
+
+  const today = WIB_DAY_CODES[get("weekday")];
+  if (!days.includes(today)) return false;
+
+  const nowMinutes = parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
+  const [startH, startM] = (bh.start || "00:00").split(":").map(Number);
+  const [endH, endM] = (bh.end || "23:59").split(":").map(Number);
+  return nowMinutes >= startH * 60 + startM && nowMinutes < endH * 60 + endM;
+}
+
+function updateOfflineBanners() {
+  const online = isWithinBusinessHours(businessHours);
+  const message = (businessHours && businessHours.offlineMessage) ||
+    "Tim kami sedang tidak online saat ini. Silakan tinggalkan pesan, kami akan balas begitu online kembali.";
+
+  [hoursOfflineBanner, hoursOfflineBannerLogin].forEach((el) => {
+    if (!el) return;
+    if (online) {
+      el.classList.add("hidden");
+    } else {
+      el.textContent = "🌙 " + message;
+      el.classList.remove("hidden");
+    }
+  });
 }
 
 // Ambil IP & perkiraan lokasi dari layanan lookup publik (tanpa perlu izin
@@ -635,6 +680,18 @@ async function init() {
         wsData.autoGreetingOptionReplies && typeof wsData.autoGreetingOptionReplies === "object"
           ? wsData.autoGreetingOptionReplies
           : {};
+      businessHours = {
+        enabled: !!wsData.businessHoursEnabled,
+        days: Array.isArray(wsData.businessHoursDays) ? wsData.businessHoursDays : [],
+        start: wsData.businessHoursStart || "09:00",
+        end: wsData.businessHoursEnd || "17:00",
+        offlineMessage: wsData.offlineMessage || ""
+      };
+      updateOfflineBanners();
+      // Status online/offline murni soal jam berjalan, bukan nunggu event
+      // Firestore -- dicek ulang tiap menit supaya banner-nya akurat kalau
+      // customer buka halaman ini lama (mis. pas jam kerja lagi mepet).
+      setInterval(updateOfflineBanners, 60000);
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
