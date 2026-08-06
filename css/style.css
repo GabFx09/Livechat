@@ -577,6 +577,19 @@ button, a, input, textarea {
   border-radius: 999px;
 }
 
+.customer-item .badge.archived-tag {
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.user-item.active .badge.archived-tag {
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  border-color: transparent;
+}
+
 .customer-item.waiting .name-row {
   color: var(--text);
 }

@@ -733,9 +733,14 @@ function matchesSearch(data) {
 function getVisibleCustomerEntries() {
   const entries = [];
   customersDataMap.forEach((data, uid) => {
-    const isArchived = !!data.archived;
-    if (currentListView === "archived" && !isArchived) return;
-    if (currentListView === "active" && isArchived) return;
+    // Lagi nyari? Abaikan filter tab Aktif/Arsip -- customer maunya nemu
+    // chat-nya, bukan dibatasi tab mana yang lagi kebuka (chat yang dicari
+    // bisa saja sudah keburu ke-auto-archive).
+    if (!searchQuery) {
+      const isArchived = !!data.archived;
+      if (currentListView === "archived" && !isArchived) return;
+      if (currentListView === "active" && isArchived) return;
+    }
     if (!matchesSearch(data)) return;
     entries.push({ uid, name: data.name });
   });
@@ -834,8 +839,10 @@ function renderCustomerList() {
 
   customersDataMap.forEach((data, uid) => {
     const isArchived = !!data.archived;
-    if (currentListView === "archived" && !isArchived) return;
-    if (currentListView === "active" && isArchived) return;
+    if (!searchQuery) {
+      if (currentListView === "archived" && !isArchived) return;
+      if (currentListView === "active" && isArchived) return;
+    }
     if (!matchesSearch(data)) return;
 
     const unreadCount = data.unreadCount || 0;
@@ -872,6 +879,15 @@ function renderCustomerList() {
       badge.className = "badge";
       badge.textContent = String(unreadCount);
       nameRow.appendChild(badge);
+    }
+    // Hasil pencarian bisa nyelip dari luar tab yang lagi kebuka (lihat
+    // getVisibleCustomerEntries/renderCustomerList di atas) -- tag ini
+    // ngasih tau kenapa chat yang diarsipkan muncul pas lagi di tab Aktif.
+    if (searchQuery && isArchived && currentListView !== "archived") {
+      const archivedTag = document.createElement("span");
+      archivedTag.className = "badge archived-tag";
+      archivedTag.textContent = "Arsip";
+      nameRow.appendChild(archivedTag);
     }
     info.appendChild(nameRow);
 
