@@ -796,8 +796,16 @@ async function init() {
   }
 
   try {
-    const user = await ensureSignedIn();
-    const wsSnap = await getDoc(doc(db, ...wsPath()));
+    // Sign-in anonim & ambil data workspace ditembak bersamaan (dok
+    // workspace publik, tidak butuh auth) supaya tidak nunggu bergiliran --
+    // baru setelah user.uid didapat, ambil data customer (butuh uid).
+    const signInPromiseInit = ensureSignedIn();
+    const wsSnapPromise = getDoc(doc(db, ...wsPath()));
+    const user = await signInPromiseInit;
+    const [wsSnap, customerSnap] = await Promise.all([
+      wsSnapPromise,
+      getDoc(doc(db, ...wsPath("customers", user.uid)))
+    ]);
     if (wsSnap.exists()) {
       const wsData = wsSnap.data();
       if (wsData.brandName) applyBrandName(wsData.brandName);
@@ -824,7 +832,6 @@ async function init() {
     }
 
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
-    const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     if (customerSnap.exists() && customerSnap.data().name) {
       optionSelectCount = customerSnap.data().optionSelectCount || 0;
       enterChat(user.uid, customerSnap.data().name);
