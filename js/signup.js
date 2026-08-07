@@ -129,7 +129,7 @@ signupBtn.addEventListener("click", async () => {
 
   signupSuccess.classList.remove("hidden");
   setTimeout(() => {
-    window.location.href = "admin.html";
+    window.location.href = "/admin/";
   }, 1500);
 });
 

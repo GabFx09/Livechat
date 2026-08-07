@@ -72,7 +72,7 @@ export function showImageLightbox(dataUrl) {
 // terkirim -- kasih kesempatan lihat dulu & batal, jangan langsung nyelonong
 // ke chat begitu file dipilih/di-paste. Dibikin dinamis (bukan markup statis
 // di HTML) sama seperti showImageLightbox di atas, supaya tidak perlu
-// diduplikasi ke index.html/404.html/admin.html sekaligus.
+// diduplikasi ke index.html/404.html/admin/index.html sekaligus.
 export function showImageSendConfirm(dataUrl) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");

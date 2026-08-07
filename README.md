@@ -3,12 +3,12 @@
 Platform live chat customer service yang bisa dipakai bareng-bareng oleh **banyak perusahaan berbeda** (multi-tenant), mirip Chaport/Tawk.to/Crisp. Tiap perusahaan punya **workspace** sendiri — data customer & percakapannya terisolasi, tidak bisa saling lihat.
 
 - Pengunjung website perusahaan (`index.html?w=WORKSPACE_ID`) cukup masukkan username lalu langsung chat — tanpa registrasi.
-- Admin (`admin.html`, **URL sama untuk semua perusahaan**) login dengan email & password, sistem otomatis tahu dia admin di workspace mana, lalu melihat & membalas percakapan customer workspace-nya secara real-time.
+- Admin (`/admin/`, **URL sama untuk semua perusahaan**) login dengan email & password, sistem otomatis tahu dia admin di workspace mana, lalu melihat & membalas percakapan customer workspace-nya secara real-time.
 - Widget bubble (`js/widget.js`) bisa ditempel di website perusahaan mana pun, terhubung ke workspace mereka lewat parameter konfigurasi.
 
 Situs ini murni HTML/CSS/JS statis (tanpa proses build), sehingga bisa di-hosting gratis lewat GitHub Pages. Data disimpan di Firebase Firestore (realtime, gratis).
 
-Live: https://app.imperialttchat.com/ dan https://app.imperialttchat.com/admin.html
+Live: https://app.imperialttchat.com/ dan https://app.imperialttchat.com/admin/
 
 **Pemilik platform** (Anda) yang mengontrol siapa boleh gabung: tambahkan perusahaan baru manual lewat Firebase Console (langkah 4a-4c), atau bagikan kode undangan sekali-pakai supaya mereka daftar sendiri lewat `signup.html` (langkah 4e) — dua-duanya menghasilkan workspace yang sama persis.
 
@@ -99,7 +99,7 @@ Ulangi 4b + 4c kalau perusahaan itu mau lebih dari 1 admin (tiap admin dapat use
 
 ### 4d. Berikan ke perusahaan tsb
 
-- **Admin login**: `https://app.imperialttchat.com/admin.html` (URL sama untuk semua perusahaan, tidak perlu dibedakan) + email/password dari 4b.
+- **Admin login**: `https://app.imperialttchat.com/admin/` (URL sama untuk semua perusahaan, tidak perlu dibedakan) + email/password dari 4b.
 - **Link chat langsung** (mis. buat bio WhatsApp/QR code) — dua format, sama-sama valid:
   - Bersih: `https://app.imperialttchat.com/WORKSPACE_ID/`
   - Atau: `https://app.imperialttchat.com/?w=WORKSPACE_ID`
@@ -118,7 +118,7 @@ Ada juga `signup.html` — perusahaan baru bisa bikin akun admin + workspace-nya
    Klik **Save**. Kode ini sekali pakai — begitu ada yang signup pakai kode ini, otomatis terkunci (`used` jadi `true`) dan tidak bisa dipakai lagi buat bikin workspace lain.
 
 2. **Bagikan** kode itu + link `https://app.imperialttchat.com/signup.html` ke perusahaan yang bersangkutan.
-3. Mereka isi form (kode undangan, nama perusahaan, nama tampilan admin, email, password) → klik **Daftar & Buat Workspace** → otomatis dapat akun admin + workspace baru, langsung diarahkan ke `admin.html`. Hasilnya identik dengan yang dibuat manual lewat 4a-4c (workspace ID di-generate otomatis, bisa dilihat lewat Firestore Console kalau perlu link chat/widget-nya).
+3. Mereka isi form (kode undangan, nama perusahaan, nama tampilan admin, email, password) → klik **Daftar & Buat Workspace** → otomatis dapat akun admin + workspace baru, langsung diarahkan ke `/admin/`. Hasilnya identik dengan yang dibuat manual lewat 4a-4c (workspace ID di-generate otomatis, bisa dilihat lewat Firestore Console kalau perlu link chat/widget-nya).
 
 **Kalau signup gagal di tengah jalan** (mis. koneksi putus setelah kode terpakai tapi sebelum workspace-nya lengkap terbentuk) — app ini statis tanpa backend jadi tidak ada rollback otomatis. Kode itu jadi "terbakar" percuma; solusinya buat kode undangan baru, atau reset manual field `used`/`usedByUid`/`usedAt`/`claimedWorkspaceId` dokumen kode itu balik ke kondisi awal (`false`/`null`) lewat Firestore Console kalau workspace setengah-jadinya juga sudah dibersihkan manual.
 
@@ -133,7 +133,7 @@ npx serve .
 
 Lalu buka:
 - `http://localhost:8080/index.html?w=WORKSPACE_ID` — sisi customer (wajib ada `?w=...`, kalau tidak akan muncul halaman "Workspace tidak ditemukan").
-- `http://localhost:8080/admin.html` — sisi admin, login dengan email/password dari langkah 4b.
+- `http://localhost:8080/admin/` — sisi admin, login dengan email/password dari langkah 4b.
 
 ## 6. Upload ke GitHub & aktifkan GitHub Pages
 
@@ -205,7 +205,7 @@ Cara kerjanya:
 - **Saved Replies**: tekan **Ctrl+/** (atau klik ⚡ di sebelah kolom pesan) untuk buka daftar balasan cepat tersimpan, bisa tambah/hapus sendiri. Mengetik 3+ huruf yang cocok dengan salah satu saved reply juga langsung memunculkan saran di atas kolom pesan (navigasi dengan panah atas/bawah, pilih dengan Enter/klik).
 - **Navigasi keyboard**: **Alt + panah atas/bawah** untuk pindah antar chat customer tanpa klik mouse.
 - **Dashboard Statistik**: klik ikon 📊 di rail kiri untuk lihat jumlah pesan hari ini (dengan perbandingan naik/turun dari kemarin), jumlah customer baru hari ini, dan grafik batang jumlah pesan 30 hari terakhir. Datanya dari counter harian (`stats/{YYYY-MM-DD}`) yang otomatis bertambah tiap ada pesan terkirim — jadi cuma menghitung aktivitas **sejak fitur ini dirilis**, histori sebelumnya tidak ikut terhitung.
-- **Link per menu**: tiap menu di rail kiri admin punya URL sendiri lewat hash (`#/open`, `#/all`, `#/archived`, `#/stats`, `#/settings`) — mis. `admin.html#/settings` langsung membuka panel Pengaturan, `admin.html#/stats` langsung membuka Statistik. Bisa di-refresh/bookmark/share, dan tombol back/forward browser juga berfungsi untuk pindah antar menu.
+- **Link per menu**: tiap menu di rail kiri admin punya URL sendiri lewat hash (`#/open`, `#/all`, `#/archived`, `#/stats`, `#/settings`) — mis. `/admin/#/settings` langsung membuka panel Pengaturan, `/admin/#/stats` langsung membuka Statistik. Bisa di-refresh/bookmark/share, dan tombol back/forward browser juga berfungsi untuk pindah antar menu.
 - **Live typing preview (admin saja)**: saat customer sedang mengetik, admin bisa lihat draf ketikannya secara real-time (bukan cuma indikator "sedang mengetik") di atas kolom balas. Draf otomatis hilang begitu customer kirim pesan atau menghapus semua ketikannya. Catatan: ini fitur umum di tool livechat (LiveChat, Intercom, dll), tapi berarti admin melihat teks sebelum customer sempat membatalkan/menghapusnya — pertimbangkan untuk diinformasikan ke customer kalau relevan untuk kebijakan privasi Anda.
 - **Signup mandiri pakai kode undangan** (`signup.html`): alternatif buat langkah 4a-4c yang manual — perusahaan baru bikin akun admin + workspace sendiri asal punya kode undangan sekali-pakai yang Anda buat dulu lewat Firestore Console. Lihat langkah 4e di atas untuk cara bikin kodenya.
 
@@ -241,5 +241,5 @@ Lalu buka terminal baru (supaya PATH ke-refresh) sebelum jalankan `npm run test:
 - Setiap workspace terisolasi lewat Firestore rules: admin workspace A tidak bisa membaca/menulis data workspace B sama sekali (dicek lewat `exists(workspaces/{id}/admins/{uid})` yang scoped ke `workspaceId` masing-masing).
 - `adminIndex/{uid}` dan dokumen `admins` di dalam tiap workspace **hanya bisa dibuat manual lewat Firebase Console** — tidak ada cara bagi siapa pun untuk mengangkat dirinya sendiri jadi admin lewat aplikasi.
 - Sisi customer pakai Firebase Anonymous Auth: siapa pun yang buka link/widget suatu workspace bisa mulai chat dengan username apa saja — ini memang perilaku wajar untuk widget customer service publik.
-- `admin.html` tidak ditautkan dari `index.html` manapun, tapi ini cuma "security by obscurity" tambahan — pengaman sesungguhnya ada di kombinasi login + Firestore rules di atas.
+- `/admin/` tidak ditautkan dari `index.html` manapun, tapi ini cuma "security by obscurity" tambahan — pengaman sesungguhnya ada di kombinasi login + Firestore rules di atas.
 - Menggunakan tier gratis Firebase (Spark plan). Untuk jumlah workspace/traffic yang besar, pantau kuota Firestore (jumlah baca/tulis) di Firebase Console — kalau mendekati limit gratis, perlu upgrade ke Blaze (bayar sesuai pakai).
