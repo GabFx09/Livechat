@@ -2040,85 +2040,12 @@ button, a, input, textarea {
   gap: 8px;
 }
 
-.rating-card .hint {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  margin: 0 0 4px;
-}
-
-.rating-card textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--panel-alt);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.9rem;
-  margin-bottom: 14px;
-  resize: vertical;
-}
-
-.rating-stars {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  font-size: 2.2rem;
-  line-height: 1;
-  margin: 6px 0 18px;
-}
-
-.rating-star {
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--border);
-  transition: color 0.15s ease, transform 0.1s ease;
-}
-
-.rating-star.active {
-  color: #ffb020;
-  transform: scale(1.12);
-}
-
-.rating-thanks {
-  margin: 4px 0 0;
-  font-weight: 600;
-  color: var(--online);
-}
-
-#rating-submit-btn {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: var(--accent-grad);
-  color: white;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.12s ease;
-}
-
-#rating-submit-btn:hover {
-  transform: translateY(-1px);
-}
-
-#rating-submit-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .chat-header-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-#rating-btn {
-  margin-left: auto;
 }
 
 .btn-secondary {

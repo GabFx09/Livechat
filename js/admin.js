@@ -228,8 +228,6 @@ const statsTodayNewCustomers = document.getElementById("stats-today-new-customer
 const statsTotalCustomers = document.getElementById("stats-total-customers");
 const statsOpenCustomers = document.getElementById("stats-open-customers");
 const statsResponseTime = document.getElementById("stats-response-time");
-const statsRating = document.getElementById("stats-rating");
-const statsRatingCount = document.getElementById("stats-rating-count");
 const statsDeltaEl = document.getElementById("stats-delta");
 const statsChartEl = document.getElementById("stats-chart");
 const statsChartTotal = document.getElementById("stats-chart-total");
@@ -648,18 +646,12 @@ async function openStats() {
 
   let firstResponseTotalMs = 0;
   let firstResponseCount = 0;
-  let ratingTotal = 0;
-  let ratingCount = 0;
   byDate.forEach((data) => {
     firstResponseTotalMs += data.firstResponseTotalMs || 0;
     firstResponseCount += data.firstResponseCount || 0;
-    ratingTotal += data.ratingTotal || 0;
-    ratingCount += data.ratingCount || 0;
   });
   statsResponseTime.textContent =
     firstResponseCount > 0 ? formatDurationShort(firstResponseTotalMs / firstResponseCount) : "-";
-  statsRating.textContent = ratingCount > 0 ? (ratingTotal / ratingCount).toFixed(1) + " ⭐" : "-";
-  statsRatingCount.textContent = String(ratingCount);
 
   const days = [];
   for (let i = DAYS - 1; i >= 0; i--) {

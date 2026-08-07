@@ -463,16 +463,21 @@ test("stats: create ditolak kalau ada field di luar daftar counter yang dikenal"
   await assertFails(setDoc(doc(db, "workspaces", WS, "stats", "2024-01-01"), { messageCount: 1, hacked: true }));
 });
 
-test("stats: create/update dengan counter yang dikenal (termasuk field baru rating/response-time) berhasil", async () => {
+test("stats: create/update dengan counter yang dikenal (termasuk field response-time) berhasil", async () => {
   const db = asCustomer();
   await assertSucceeds(
     setDoc(doc(db, "workspaces", WS, "stats", "2024-01-01"), {
       messageCount: 1,
-      ratingTotal: 5,
-      ratingCount: 1,
       firstResponseTotalMs: 12000,
       firstResponseCount: 1
     })
+  );
+});
+
+test("stats: field rating (dihapus dari fitur) sudah tidak diizinkan", async () => {
+  const db = asCustomer();
+  await assertFails(
+    setDoc(doc(db, "workspaces", WS, "stats", "2024-01-01"), { messageCount: 1, ratingTotal: 5, ratingCount: 1 })
   );
 });
 
