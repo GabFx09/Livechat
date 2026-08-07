@@ -57,6 +57,32 @@ export async function compressImageFile(
   return dataUrl;
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Sama seperti compressImageFile, tapi GIF dilewatkan apa adanya (dibaca
+// langsung jadi data URL, bukan digambar ulang ke canvas) supaya animasinya
+// tidak ikut hilang -- canvas.toDataURL cuma bisa ambil 1 frame statis dari
+// GIF. Dipakai buat gambar bubble widget yang boleh berupa GIF animasi.
+export async function compressImageOrPassthroughGif(file, options = {}) {
+  if (file.type === "image/gif") {
+    const maxBytes = options.maxGifBytes || 300000;
+    if (file.size > maxBytes) {
+      throw new Error(
+        `GIF terlalu besar (maks ${Math.round(maxBytes / 1000)}KB supaya tidak memperlambat loading website). Coba GIF lain yang lebih kecil.`
+      );
+    }
+    return fileToDataUrl(file);
+  }
+  return compressImageFile(file, options);
+}
+
 export function showImageLightbox(dataUrl) {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay lightbox";

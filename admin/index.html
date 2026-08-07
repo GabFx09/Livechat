@@ -151,6 +151,45 @@
           </div>
           <label class="auth-label" for="appearance-icon-input">Ikon Bubble (emoji)</label>
           <input id="appearance-icon-input" type="text" placeholder="💬" maxlength="4" />
+          <p class="settings-hint">Dipakai kalau "Gambar Bubble" di bawah kosong.</p>
+
+          <label class="auth-label">Gambar Bubble (opsional, bisa GIF animasi)</label>
+          <div class="avatar-preview-wrap">
+            <div id="bubble-image-preview" class="avatar-preview image-preview-square"></div>
+          </div>
+          <div class="settings-image-actions">
+            <label class="file-btn" for="bubble-image-input">Upload gambar</label>
+            <input id="bubble-image-input" type="file" accept="image/*" class="hidden" />
+            <button id="bubble-image-remove-btn" type="button" class="btn-secondary">Pakai emoji lagi</button>
+          </div>
+
+          <label class="auth-label" for="appearance-animation-select">Animasi Bubble</label>
+          <select id="appearance-animation-select">
+            <option value="none">Tidak ada</option>
+            <option value="pulse">Berdenyut (pulse)</option>
+            <option value="bounce">Memantul (bounce)</option>
+          </select>
+
+          <label class="auth-label">Logo di Header Jendela Chat (opsional)</label>
+          <div class="avatar-preview-wrap">
+            <div id="header-logo-preview" class="avatar-preview image-preview-square"></div>
+          </div>
+          <div class="settings-image-actions">
+            <label class="file-btn" for="header-logo-input">Upload logo</label>
+            <input id="header-logo-input" type="file" accept="image/*" class="hidden" />
+            <button id="header-logo-remove-btn" type="button" class="btn-secondary">Hapus logo</button>
+          </div>
+
+          <label class="settings-checkbox-row" for="proactive-enabled-input">
+            <input id="proactive-enabled-input" type="checkbox" />
+            <span>Sapaan otomatis (muncul sendiri sebelum diklik)</span>
+          </label>
+          <p class="settings-hint">Speech-bubble kecil di sebelah ikon chat yang muncul otomatis di website, mengajak pengunjung buka chat -- beda dari Auto-Chat yang baru jalan setelah widget dibuka.</p>
+          <label class="auth-label" for="proactive-text-input">Teks Sapaan</label>
+          <input id="proactive-text-input" type="text" placeholder="Halo! Ada yang bisa kami bantu?" maxlength="150" />
+          <label class="auth-label" for="proactive-delay-input">Muncul Setelah (detik)</label>
+          <input id="proactive-delay-input" type="number" min="1" max="60" placeholder="4" />
+
           <button id="appearance-save-btn" type="button">Simpan Appearance</button>
           <p id="appearance-error" class="error hidden"></p>
         </div>

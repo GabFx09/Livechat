@@ -31,7 +31,12 @@ import {
   ReCaptchaV3Provider
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
-import { compressImageFile, showImageLightbox, showImageSendConfirm } from "./image-utils.js";
+import {
+  compressImageFile,
+  compressImageOrPassthroughGif,
+  showImageLightbox,
+  showImageSendConfirm
+} from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
 import { parseAutochatOptions, formatAutochatOptionsForTextarea } from "./autochat-utils.js";
 import { formatDurationShort } from "./format-utils.js";
@@ -171,6 +176,16 @@ const appearanceBrandInput = document.getElementById("appearance-brand-input");
 const appearanceColorInput = document.getElementById("appearance-color-input");
 const appearanceColorText = document.getElementById("appearance-color-text");
 const appearanceIconInput = document.getElementById("appearance-icon-input");
+const bubbleImagePreview = document.getElementById("bubble-image-preview");
+const bubbleImageInput = document.getElementById("bubble-image-input");
+const bubbleImageRemoveBtn = document.getElementById("bubble-image-remove-btn");
+const appearanceAnimationSelect = document.getElementById("appearance-animation-select");
+const headerLogoPreview = document.getElementById("header-logo-preview");
+const headerLogoInput = document.getElementById("header-logo-input");
+const headerLogoRemoveBtn = document.getElementById("header-logo-remove-btn");
+const proactiveEnabledInput = document.getElementById("proactive-enabled-input");
+const proactiveTextInput = document.getElementById("proactive-text-input");
+const proactiveDelayInput = document.getElementById("proactive-delay-input");
 const appearanceSaveBtn = document.getElementById("appearance-save-btn");
 const appearanceError = document.getElementById("appearance-error");
 
@@ -226,6 +241,10 @@ let suggestionMatches = [];
 let suggestionIndex = -1;
 
 let pendingPhotoDataUrl = null;
+// undefined = tidak diubah (pertahankan nilai lama), null = mau dihapus
+// (kembali ke emoji/tanpa logo), string = gambar baru yang mau disimpan.
+let pendingBubbleImageDataUrl = undefined;
+let pendingHeaderLogoDataUrl = undefined;
 
 // --- Suara notifikasi ---
 let audioCtx = null;
@@ -483,6 +502,12 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
       currentAdmin.workspaceBrandName = wsData.brandName || wsData.name || "";
       currentAdmin.workspaceThemeColor = wsData.themeColor || "#5b8cff";
       currentAdmin.workspaceBubbleIcon = wsData.bubbleIcon || "💬";
+      currentAdmin.workspaceBubbleImage = wsData.bubbleImageBase64 || null;
+      currentAdmin.workspaceHeaderLogo = wsData.headerLogoBase64 || null;
+      currentAdmin.workspaceBubbleAnimation = wsData.bubbleAnimation || "none";
+      currentAdmin.proactiveGreetingEnabled = !!wsData.proactiveGreetingEnabled;
+      currentAdmin.proactiveGreetingText = wsData.proactiveGreetingText || "";
+      currentAdmin.proactiveGreetingDelay = wsData.proactiveGreetingDelay || 4;
       currentAdmin.autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       currentAdmin.autoGreetingMessage = wsData.autoGreetingMessage || "";
       currentAdmin.autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
@@ -1714,12 +1739,33 @@ function openProfileSettings() {
   settingsProfileView.classList.remove("hidden");
 }
 
+function renderImagePreview(el, dataUrl, placeholderText) {
+  if (dataUrl) {
+    el.style.backgroundImage = `url(${dataUrl})`;
+    el.textContent = "";
+  } else {
+    el.style.backgroundImage = "";
+    el.textContent = placeholderText;
+  }
+}
+
 function openAppearanceSettings() {
   appScreen.classList.add("hidden");
   appearanceBrandInput.value = currentAdmin.workspaceBrandName || "";
   appearanceColorInput.value = currentAdmin.workspaceThemeColor || "#5b8cff";
   appearanceColorText.value = currentAdmin.workspaceThemeColor || "#5b8cff";
   appearanceIconInput.value = currentAdmin.workspaceBubbleIcon || "💬";
+
+  pendingBubbleImageDataUrl = undefined;
+  pendingHeaderLogoDataUrl = undefined;
+  renderImagePreview(bubbleImagePreview, currentAdmin.workspaceBubbleImage, "Emoji");
+  renderImagePreview(headerLogoPreview, currentAdmin.workspaceHeaderLogo, "Tanpa logo");
+  appearanceAnimationSelect.value = currentAdmin.workspaceBubbleAnimation || "none";
+
+  proactiveEnabledInput.checked = !!currentAdmin.proactiveGreetingEnabled;
+  proactiveTextInput.value = currentAdmin.proactiveGreetingText || "";
+  proactiveDelayInput.value = currentAdmin.proactiveGreetingDelay || 4;
+
   appearanceError.classList.add("hidden");
   settingsAppearanceView.classList.remove("hidden");
 }
@@ -1947,13 +1993,68 @@ appearanceColorText.addEventListener("input", () => {
   }
 });
 
+bubbleImageInput.addEventListener("change", async () => {
+  const file = bubbleImageInput.files[0];
+  bubbleImageInput.value = "";
+  if (!file) return;
+
+  try {
+    // Ikon bubble muncul di setiap halaman website perusahaan, jadi
+    // dijaga kecil (maks 200px / ~120KB) supaya tidak memperlambat loading
+    // situs mereka -- GIF dilewatkan apa adanya (lihat compressImageOrPassthroughGif)
+    // supaya animasinya tidak hilang, tapi dibatasi ukuran filenya sendiri.
+    pendingBubbleImageDataUrl = await compressImageOrPassthroughGif(file, {
+      maxDimension: 200,
+      maxDataUrlLength: 120000,
+      maxGifBytes: 200000
+    });
+    renderImagePreview(bubbleImagePreview, pendingBubbleImageDataUrl, "Emoji");
+  } catch (err) {
+    appearanceError.textContent = err.message || "Gagal memproses gambar.";
+    appearanceError.classList.remove("hidden");
+  }
+});
+
+bubbleImageRemoveBtn.addEventListener("click", () => {
+  pendingBubbleImageDataUrl = null;
+  renderImagePreview(bubbleImagePreview, null, "Emoji");
+});
+
+headerLogoInput.addEventListener("change", async () => {
+  const file = headerLogoInput.files[0];
+  headerLogoInput.value = "";
+  if (!file) return;
+
+  try {
+    pendingHeaderLogoDataUrl = await compressImageFile(file, { maxDimension: 300, maxDataUrlLength: 150000 });
+    renderImagePreview(headerLogoPreview, pendingHeaderLogoDataUrl, "Tanpa logo");
+  } catch (err) {
+    appearanceError.textContent = err.message || "Gagal memproses gambar.";
+    appearanceError.classList.remove("hidden");
+  }
+});
+
+headerLogoRemoveBtn.addEventListener("click", () => {
+  pendingHeaderLogoDataUrl = null;
+  renderImagePreview(headerLogoPreview, null, "Tanpa logo");
+});
+
 appearanceSaveBtn.addEventListener("click", async () => {
   const brandName = appearanceBrandInput.value.trim();
   const themeColor = appearanceColorText.value.trim();
   const bubbleIcon = appearanceIconInput.value.trim();
+  const bubbleAnimation = appearanceAnimationSelect.value;
+  const proactiveGreetingEnabled = proactiveEnabledInput.checked;
+  const proactiveGreetingText = proactiveTextInput.value.trim();
+  const proactiveGreetingDelay = Math.min(60, Math.max(1, Number(proactiveDelayInput.value) || 4));
 
   if (!/^#[0-9a-fA-F]{6}$/.test(themeColor)) {
     appearanceError.textContent = "Warna tema harus format hex, mis. #5b8cff.";
+    appearanceError.classList.remove("hidden");
+    return;
+  }
+  if (proactiveGreetingEnabled && !proactiveGreetingText) {
+    appearanceError.textContent = "Isi dulu teks sapaannya sebelum mengaktifkan sapaan otomatis.";
     appearanceError.classList.remove("hidden");
     return;
   }
@@ -1962,18 +2063,31 @@ appearanceSaveBtn.addEventListener("click", async () => {
   appearanceError.classList.add("hidden");
 
   try {
-    await setDoc(
-      doc(db, ...wsPath()),
-      {
-        brandName: brandName || currentAdmin.workspaceName || "",
-        themeColor,
-        bubbleIcon: bubbleIcon || "💬"
-      },
-      { merge: true }
-    );
+    const update = {
+      brandName: brandName || currentAdmin.workspaceName || "",
+      themeColor,
+      bubbleIcon: bubbleIcon || "💬",
+      bubbleAnimation,
+      proactiveGreetingEnabled,
+      proactiveGreetingText,
+      proactiveGreetingDelay
+    };
+    // undefined = tidak disentuh sama sekali (biarkan nilai lama di
+    // Firestore), null = eksplisit dihapus (balik ke emoji/tanpa logo).
+    if (pendingBubbleImageDataUrl !== undefined) update.bubbleImageBase64 = pendingBubbleImageDataUrl;
+    if (pendingHeaderLogoDataUrl !== undefined) update.headerLogoBase64 = pendingHeaderLogoDataUrl;
+
+    await setDoc(doc(db, ...wsPath()), update, { merge: true });
+
     currentAdmin.workspaceBrandName = brandName;
     currentAdmin.workspaceThemeColor = themeColor;
     currentAdmin.workspaceBubbleIcon = bubbleIcon || "💬";
+    currentAdmin.workspaceBubbleAnimation = bubbleAnimation;
+    currentAdmin.proactiveGreetingEnabled = proactiveGreetingEnabled;
+    currentAdmin.proactiveGreetingText = proactiveGreetingText;
+    currentAdmin.proactiveGreetingDelay = proactiveGreetingDelay;
+    if (pendingBubbleImageDataUrl !== undefined) currentAdmin.workspaceBubbleImage = pendingBubbleImageDataUrl;
+    if (pendingHeaderLogoDataUrl !== undefined) currentAdmin.workspaceHeaderLogo = pendingHeaderLogoDataUrl;
     navigateTo("open");
   } catch (err) {
     appearanceError.textContent = "Gagal menyimpan: " + err.message;

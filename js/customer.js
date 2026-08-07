@@ -76,6 +76,7 @@ let unsubMessages = null;
 let unsubCustomerDoc = null;
 let presenceIntervalId = null;
 
+const authBrandIconEl = document.getElementById("auth-brand-icon");
 const loadingScreen = document.getElementById("loading-screen");
 const workspaceErrorScreen = document.getElementById("workspace-error-screen");
 const loginScreen = document.getElementById("login-screen");
@@ -149,6 +150,16 @@ function applyBrandName(name) {
   brandNameEls.forEach((el) => {
     el.textContent = name;
   });
+}
+
+function applyHeaderLogo(dataUrl) {
+  if (!authBrandIconEl || !dataUrl) return;
+  authBrandIconEl.innerHTML = "";
+  const img = document.createElement("img");
+  img.src = dataUrl;
+  img.alt = "";
+  img.className = "auth-brand-icon-img";
+  authBrandIconEl.appendChild(img);
 }
 
 function applyThemeColor(hex) {
@@ -854,6 +865,7 @@ async function init() {
       const wsData = wsSnap.data();
       if (wsData.brandName) applyBrandName(wsData.brandName);
       if (wsData.themeColor) applyThemeColor(wsData.themeColor);
+      if (wsData.headerLogoBase64) applyHeaderLogo(wsData.headerLogoBase64);
       autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       autoGreetingMessage = wsData.autoGreetingMessage || "";
       autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];

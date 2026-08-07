@@ -119,7 +119,9 @@ service cloud.firestore {
 
       allow update: if isWorkspaceAdmin() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['brandName', 'themeColor', 'bubbleIcon', 'autoGreetingEnabled', 'autoGreetingMessage',
+          ['brandName', 'themeColor', 'bubbleIcon', 'bubbleImageBase64', 'headerLogoBase64',
+           'bubbleAnimation', 'proactiveGreetingEnabled', 'proactiveGreetingText',
+           'proactiveGreetingDelay', 'autoGreetingEnabled', 'autoGreetingMessage',
            'autoGreetingOptions', 'autoGreetingOptionReplies', 'businessHoursEnabled',
            'businessHoursDays', 'businessHoursStart', 'businessHoursEnd', 'offlineMessage']
         );
