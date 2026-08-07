@@ -7,7 +7,7 @@
   }
 
   var PROJECT_ID = "livechat-saya";
-  var CHAT_ORIGIN = "https://gabfx09.github.io/Livechat";
+  var CHAT_ORIGIN = "https://app.imperialttchat.com";
   var CHAT_URL = CHAT_ORIGIN + "/index.html?w=" + encodeURIComponent(config.workspaceId);
   var MOBILE_BREAKPOINT = 640;
 

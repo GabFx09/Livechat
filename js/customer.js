@@ -44,11 +44,11 @@ if (RECAPTCHA_V3_SITE_KEY && !RECAPTCHA_V3_SITE_KEY.startsWith("PASTE_")) {
 }
 
 // Terima workspace ID dari query string (?w=ID) ATAU dari URL bersih
-// (/Livechat/ID/, dilayani lewat trik 404.html karena GitHub Pages tidak
-// mendukung URL dinamis native). Query string diprioritaskan kalau ada.
+// (/ID/, dilayani lewat trik 404.html karena GitHub Pages tidak mendukung
+// URL dinamis native). Query string diprioritaskan kalau ada.
 function extractWorkspaceIdFromPath() {
   const segments = window.location.pathname.split("/").filter(Boolean);
-  const BASE_SEGMENTS = 1; // situs ini di-host di /Livechat/, 1 segmen dasar
+  const BASE_SEGMENTS = 0; // situs ini di-host di root domain custom, tanpa segmen dasar
   if (segments.length <= BASE_SEGMENTS) return null;
   const last = segments[segments.length - 1];
   if (last === "index.html" || last === "404.html") return null;

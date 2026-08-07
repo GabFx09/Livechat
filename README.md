@@ -8,9 +8,21 @@ Platform live chat customer service yang bisa dipakai bareng-bareng oleh **banya
 
 Situs ini murni HTML/CSS/JS statis (tanpa proses build), sehingga bisa di-hosting gratis lewat GitHub Pages. Data disimpan di Firebase Firestore (realtime, gratis).
 
-Live: https://gabfx09.github.io/Livechat/ dan https://gabfx09.github.io/Livechat/admin.html
+Live: https://app.imperialttchat.com/ dan https://app.imperialttchat.com/admin.html
 
 **Pemilik platform** (Anda) yang mengontrol siapa boleh gabung: tambahkan perusahaan baru manual lewat Firebase Console (langkah 4a-4c), atau bagikan kode undangan sekali-pakai supaya mereka daftar sendiri lewat `signup.html` (langkah 4e) — dua-duanya menghasilkan workspace yang sama persis.
+
+### Domain custom (`app.imperialttchat.com`)
+
+Situs ini di-host di GitHub Pages tapi diakses lewat domain sendiri (dibeli di Namecheap), bukan `namauser.github.io`. Kalau perlu setup ulang (pindah domain, repo baru, dll), langkah-langkahnya:
+
+1. **File `CNAME`** di root repo isinya nama domain (`app.imperialttchat.com`) — GitHub Pages baca file ini buat tahu domain custom-nya apa.
+2. **GitHub** → Settings repo → Pages → Custom domain diisi domain yang sama, lalu tunggu DNS check hijau, baru centang **Enforce HTTPS**.
+3. **Namecheap** (atau DNS provider domain-nya) → tambahkan record:
+   - Tipe **CNAME**, Host `app` (atau subdomain lain yang dipakai), Value `namauser.github.io.` (pakai username GitHub yang meng-host repo-nya, bukan nama repo).
+4. **Firebase Console** → Authentication → Settings → Authorized domains → tambahkan domain custom-nya, kalau tidak nanti anonymous sign-in (dipakai customer chat) ditolak.
+5. **reCAPTCHA v3 site key** (buat App Check, lihat langkah 3 di bawah) → https://www.google.com/recaptcha/admin → pilih key-nya → Settings → tambahkan domain custom di daftar domain yang diizinkan.
+6. Karena GitHub Pages custom domain menyajikan isi situs di **root** domain (bukan di bawah `/namarepo/`), path absolut yang di-hardcode di `404.html` dan `BASE_SEGMENTS` di `js/customer.js` serta `CHAT_ORIGIN` di `js/widget.js` mengasumsikan root — kalau lepas domain custom dan balik ke URL bawaan `namauser.github.io/namarepo/`, ketiganya perlu disesuaikan lagi.
 
 ## 1. Buat project Firebase
 
@@ -48,7 +60,7 @@ Tanpa ini, chat customer tetap bisa dipakai script/bot untuk bikin ribuan sesi/p
 4. Kalau diminta site key/secret key (bukan di-generate otomatis), buka tab baru ke https://www.google.com/recaptcha/admin/create:
    - **Label**: bebas
    - **reCAPTCHA type**: pilih **Score based (v3)**
-   - **Domains**: `gabfx09.github.io` (tambahkan `localhost` juga kalau mau tes lokal)
+   - **Domains**: `app.imperialttchat.com` (tambahkan `localhost` juga kalau mau tes lokal — `gabfx09.github.io` sudah tidak dipakai lagi sejak pindah ke domain custom)
    - **Google Cloud Platform > Project name**: pilih project Firebase kamu (mis. `livechat-saya`), bukan "My First Project"
    - Submit → muncul **Site Key** dan **Secret Key**
 5. Tempel **Secret Key** di halaman App Check tadi (Firebase). **Site Key** disimpan buat langkah berikutnya — dua kunci ini beda, jangan tertukar.
@@ -87,10 +99,10 @@ Ulangi 4b + 4c kalau perusahaan itu mau lebih dari 1 admin (tiap admin dapat use
 
 ### 4d. Berikan ke perusahaan tsb
 
-- **Admin login**: `https://gabfx09.github.io/Livechat/admin.html` (URL sama untuk semua perusahaan, tidak perlu dibedakan) + email/password dari 4b.
+- **Admin login**: `https://app.imperialttchat.com/admin.html` (URL sama untuk semua perusahaan, tidak perlu dibedakan) + email/password dari 4b.
 - **Link chat langsung** (mis. buat bio WhatsApp/QR code) — dua format, sama-sama valid:
-  - Bersih: `https://gabfx09.github.io/Livechat/WORKSPACE_ID/`
-  - Atau: `https://gabfx09.github.io/Livechat/?w=WORKSPACE_ID`
+  - Bersih: `https://app.imperialttchat.com/WORKSPACE_ID/`
+  - Atau: `https://app.imperialttchat.com/?w=WORKSPACE_ID`
 - **Snippet widget** untuk ditempel di website mereka — lihat bagian "Widget untuk website perusahaan" di bawah.
 
 ### 4e. Alternatif: signup mandiri pakai kode undangan (tidak perlu 4a-4c manual)
@@ -105,7 +117,7 @@ Ada juga `signup.html` — perusahaan baru bisa bikin akun admin + workspace-nya
 
    Klik **Save**. Kode ini sekali pakai — begitu ada yang signup pakai kode ini, otomatis terkunci (`used` jadi `true`) dan tidak bisa dipakai lagi buat bikin workspace lain.
 
-2. **Bagikan** kode itu + link `https://gabfx09.github.io/Livechat/signup.html` ke perusahaan yang bersangkutan.
+2. **Bagikan** kode itu + link `https://app.imperialttchat.com/signup.html` ke perusahaan yang bersangkutan.
 3. Mereka isi form (kode undangan, nama perusahaan, nama tampilan admin, email, password) → klik **Daftar & Buat Workspace** → otomatis dapat akun admin + workspace baru, langsung diarahkan ke `admin.html`. Hasilnya identik dengan yang dibuat manual lewat 4a-4c (workspace ID di-generate otomatis, bisa dilihat lewat Firestore Console kalau perlu link chat/widget-nya).
 
 **Kalau signup gagal di tengah jalan** (mis. koneksi putus setelah kode terpakai tapi sebelum workspace-nya lengkap terbentuk) — app ini statis tanpa backend jadi tidak ada rollback otomatis. Kode itu jadi "terbakar" percuma; solusinya buat kode undangan baru, atau reset manual field `used`/`usedByUid`/`usedAt`/`claimedWorkspaceId` dokumen kode itu balik ke kondisi awal (`false`/`null`) lewat Firestore Console kalau workspace setengah-jadinya juga sudah dibersihkan manual.
@@ -153,7 +165,7 @@ Tiap perusahaan tempel snippet ini sebelum tag `</body>` di HTML website mereka,
       themeColor: "#5b8cff"
     };
     var s = d.createElement("script");
-    s.src = "https://gabfx09.github.io/Livechat/js/widget.js";
+    s.src = "https://app.imperialttchat.com/js/widget.js";
     s.async = true;
     d.head.appendChild(s);
   })(window, document);
@@ -161,7 +173,7 @@ Tiap perusahaan tempel snippet ini sebelum tag `</body>` di HTML website mereka,
 <!-- End LiveChat Widget code -->
 ```
 
-**Catatan teknis soal URL bersih** (`/Livechat/WORKSPACE_ID/`): karena GitHub Pages tidak mendukung URL dinamis, ini disiasati lewat file `404.html` (isinya sama seperti `index.html`, dengan path aset absolut) — GitHub Pages otomatis menampilkan `404.html` untuk path apa pun yang tidak match file/folder asli, lalu `customer.js` membaca ID workspace dari segmen terakhir URL. Kalau nanti ganti nama repo GitHub, update juga `BASE_SEGMENTS`/path absolut di `404.html` dan `js/customer.js` supaya tetap cocok.
+**Catatan teknis soal URL bersih** (`/WORKSPACE_ID/`): karena GitHub Pages tidak mendukung URL dinamis, ini disiasati lewat file `404.html` (isinya sama seperti `index.html`, dengan path aset absolut) — GitHub Pages otomatis menampilkan `404.html` untuk path apa pun yang tidak match file/folder asli, lalu `customer.js` membaca ID workspace dari segmen terakhir URL. Situs ini di-host di root domain custom `app.imperialttchat.com` (lihat file `CNAME`) — kalau nanti ganti/lepas domain custom dan balik ke URL `namauser.github.io/namarepo/`, update lagi `BASE_SEGMENTS`/path absolut di `404.html` dan `js/customer.js` supaya tetap cocok.
 
 Cara kerjanya:
 - Muncul bubble 💬 melayang di pojok kanan bawah, warna & nama sesuai `themeColor`/`brandName` yang diisi di config.
