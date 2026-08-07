@@ -113,7 +113,15 @@ export function showImageSendConfirm(dataUrl) {
       resolve(result);
     }
     function onKeydown(e) {
-      if (e.key === "Escape") close(false);
+      if (e.key === "Escape") {
+        close(false);
+      } else if (e.key === "Enter") {
+        // preventDefault supaya kalau fokus masih di message-input (bekas
+        // paste Ctrl+V), Enter tidak juga ke-submit ke form kirim pesan teks
+        // -- cukup jadi "Kirim" buat dialog konfirmasi ini.
+        e.preventDefault();
+        close(true);
+      }
     }
 
     cancelBtn.addEventListener("click", () => close(false));
@@ -124,5 +132,6 @@ export function showImageSendConfirm(dataUrl) {
     document.addEventListener("keydown", onKeydown);
 
     document.body.appendChild(overlay);
+    sendBtn.focus();
   });
 }
