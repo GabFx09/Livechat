@@ -119,6 +119,11 @@ signupBtn.addEventListener("click", async () => {
     });
 
     await setDoc(doc(db, "adminIndex", user.uid), { workspaceId });
+
+    // Alias huruf-kecil (lihat firestore.rules workspaceSlugs & catatan di
+    // customer.js) -- dibuat langsung di sini juga supaya sudah aktif sejak
+    // awal, tidak nunggu admin login pertama kali dulu.
+    await setDoc(doc(db, "workspaceSlugs", workspaceId.toLowerCase()), { workspaceId }).catch(() => {});
   } catch (err) {
     showError(
       "Akun & kode undangan sudah terpakai, tapi workspace gagal dibuat lengkap (" +

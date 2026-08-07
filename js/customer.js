@@ -59,7 +59,9 @@ function extractWorkspaceIdFromPath() {
   return last;
 }
 
-const workspaceId =
+// Bukan const -- bisa dikoreksi di loadInitialData() kalau ternyata ID di
+// URL ini cuma versi huruf-kecil dari ID asli (lihat catatan di sana).
+let workspaceId =
   new URLSearchParams(window.location.search).get("w") || extractWorkspaceIdFromPath();
 
 let currentUser = null; // { uid, name }
@@ -799,10 +801,22 @@ async function loadInitialData() {
   const signInPromiseInit = ensureSignedIn();
   const wsSnapPromise = getDoc(doc(db, ...wsPath()));
   const user = await signInPromiseInit;
-  const [wsSnap, customerSnap] = await Promise.all([
-    wsSnapPromise,
-    getDoc(doc(db, ...wsPath("customers", user.uid)))
-  ]);
+  let wsSnap = await wsSnapPromise;
+
+  if (!wsSnap.exists()) {
+    // ID workspace asli case-sensitive, tapi sebagian CMS/website
+    // perusahaan otomatis mengubah URL yang ditempel jadi huruf kecil
+    // semua (dianggap "slug") -- kalau ID persis tidak ketemu, coba tabel
+    // alias huruf-kecil (dibuat otomatis tiap admin login, lihat admin.js
+    // ensureWorkspaceSlug) sebelum benar-benar menyerah.
+    const slugSnap = await getDoc(doc(db, "workspaceSlugs", workspaceId.toLowerCase()));
+    if (slugSnap.exists() && slugSnap.data().workspaceId) {
+      workspaceId = slugSnap.data().workspaceId;
+      wsSnap = await getDoc(doc(db, ...wsPath()));
+    }
+  }
+
+  const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
   return { user, wsSnap, customerSnap };
 }
 

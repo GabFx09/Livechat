@@ -26,6 +26,29 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // workspaceSlugs/{lowercaseId} = alias huruf-kecil -> workspaceId asli
+    // (yang case-sensitive, ID auto-generate Firestore). Beberapa CMS/website
+    // perusahaan otomatis mengubah URL yang ditempel jadi huruf kecil semua
+    // (dianggap "slug"), jadi customer.js butuh cara nemuin workspace asli
+    // walau huruf besarnya hilang -- lihat customer.js (loadInitialData) &
+    // admin.js (enterDashboard, yang bikin dokumen ini otomatis tiap admin
+    // login kalau belum ada, jadi berlaku juga buat workspace lama yang
+    // dionboarding manual, bukan cuma yang baru daftar lewat signup.html).
+    function isAdminOfWorkspace(workspaceId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/admins/$(request.auth.uid));
+    }
+
+    match /workspaceSlugs/{slug} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['workspaceId']) &&
+        request.resource.data.workspaceId is string &&
+        slug == request.resource.data.workspaceId.lower() &&
+        isAdminOfWorkspace(request.resource.data.workspaceId);
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // Dipakai adminIndex & workspaces/{id}/admins di bawah -- cek apakah
     // workspaceId ini memang baru dibuat lewat kode undangan yang diklaim
     // oleh uid yang sedang request sekarang.

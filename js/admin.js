@@ -443,6 +443,23 @@ function renderAvatar(el, photo, name) {
   }
 }
 
+// Bikin alias huruf-kecil kalau belum ada, supaya link customer yang
+// ditempel di website perusahaan (yang kadang otomatis diubah jadi huruf
+// kecil semua oleh CMS-nya) tetap bisa nemuin workspace ini -- lihat
+// firestore.rules (workspaceSlugs) & customer.js (loadInitialData).
+// Diam-diam gagal kalau errror (mis. lagi offline), dicoba lagi login berikutnya.
+async function ensureWorkspaceSlug(workspaceId) {
+  try {
+    const slugRef = doc(db, "workspaceSlugs", workspaceId.toLowerCase());
+    const slugSnap = await getDoc(slugRef);
+    if (!slugSnap.exists()) {
+      await setDoc(slugRef, { workspaceId });
+    }
+  } catch (err) {
+    // tidak krusial, dicoba lagi login berikutnya
+  }
+}
+
 async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   ensureAudio();
   currentAdmin = {
@@ -483,6 +500,8 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   } catch (err) {
     // biarkan, tidak krusial
   }
+
+  ensureWorkspaceSlug(workspaceId);
 
   listenCustomers();
   listenSavedReplies();
