@@ -788,6 +788,20 @@ nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") startBtn.click();
 });
 
+// Sign-in anonim & ambil data workspace ditembak bersamaan (dok workspace
+// publik, tidak butuh auth) supaya tidak nunggu bergiliran -- baru setelah
+// user.uid didapat, ambil data customer (butuh uid).
+async function loadInitialData() {
+  const signInPromiseInit = ensureSignedIn();
+  const wsSnapPromise = getDoc(doc(db, ...wsPath()));
+  const user = await signInPromiseInit;
+  const [wsSnap, customerSnap] = await Promise.all([
+    wsSnapPromise,
+    getDoc(doc(db, ...wsPath("customers", user.uid)))
+  ]);
+  return { user, wsSnap, customerSnap };
+}
+
 async function init() {
   if (!workspaceId) {
     loadingScreen.classList.add("hidden");
@@ -795,17 +809,29 @@ async function init() {
     return;
   }
 
+  // Coba beberapa kali sebelum menyerah -- WiFi/data seluler yang putus
+  // sesaat pas halaman baru dibuka sebelumnya bikin sign-in/ambil data
+  // workspace gagal diam-diam, jatuh ke tampilan default (nama & warna
+  // generik) tanpa pesan error apa pun ke customer.
+  const MAX_ATTEMPTS = 3;
+  let loaded = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      loaded = await loadInitialData();
+      break;
+    } catch (err) {
+      console.error(`Gagal memuat workspace (percobaan ${attempt}/${MAX_ATTEMPTS}):`, err);
+      if (attempt === MAX_ATTEMPTS) {
+        loginScreen.classList.remove("hidden");
+        loadingScreen.classList.add("hidden");
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+    }
+  }
+
   try {
-    // Sign-in anonim & ambil data workspace ditembak bersamaan (dok
-    // workspace publik, tidak butuh auth) supaya tidak nunggu bergiliran --
-    // baru setelah user.uid didapat, ambil data customer (butuh uid).
-    const signInPromiseInit = ensureSignedIn();
-    const wsSnapPromise = getDoc(doc(db, ...wsPath()));
-    const user = await signInPromiseInit;
-    const [wsSnap, customerSnap] = await Promise.all([
-      wsSnapPromise,
-      getDoc(doc(db, ...wsPath("customers", user.uid)))
-    ]);
+    const { user, wsSnap, customerSnap } = loaded;
     if (wsSnap.exists()) {
       const wsData = wsSnap.data();
       if (wsData.brandName) applyBrandName(wsData.brandName);
