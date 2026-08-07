@@ -5,7 +5,7 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
-  getFirestore,
+  initializeFirestore,
   doc,
   setDoc,
   getDoc,
@@ -29,7 +29,11 @@ import { isWithinBusinessHours } from "./hours-utils.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// autoDetectLongPolling: sebagian jaringan (firewall kantor, beberapa
+// operator seluler, proxy) memblokir koneksi streaming (WebChannel) bawaan
+// Firestore tanpa error yang jelas -- ini bikin SDK otomatis pindah ke
+// long-polling biasa kalau streaming tidak jalan, tanpa perlu deteksi manual.
+const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 
 // Lewati App Check kalau site key belum di-setup admin (lihat
 // firebase-config.js) -- app tetap jalan normal, cuma tanpa proteksi

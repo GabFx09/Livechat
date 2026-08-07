@@ -5,7 +5,7 @@ import {
   deleteUser
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
-  getFirestore,
+  initializeFirestore,
   doc,
   setDoc,
   updateDoc,
@@ -20,7 +20,9 @@ import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// Lihat catatan di customer.js: hindari koneksi streaming Firestore yang
+// bisa diblokir diam-diam di beberapa jaringan.
+const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 
 if (RECAPTCHA_V3_SITE_KEY && !RECAPTCHA_V3_SITE_KEY.startsWith("PASTE_")) {
   initializeAppCheck(app, {
