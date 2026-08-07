@@ -820,12 +820,36 @@ function checkAutoArchive() {
   });
 }
 
+// Nutup panel chat yang lagi kebuka (balik ke tampilan "Pilih customer di
+// sebelah kiri") -- dipakai kalau chat yang lagi dibuka dihapus ATAU
+// diarsipkan, supaya tidak ketinggalan nampilin chat yang sebenarnya sudah
+// tidak ada lagi di daftar Open.
+function closeActiveChat() {
+  if (unsubMessages) unsubMessages();
+  unsubMessages = null;
+  activeCustomerUid = null;
+  activeCustomerName = "";
+  chatHeaderText.textContent = "Pilih customer di sebelah kiri";
+  updateChatHeaderPresence();
+  infoToggleBtn.classList.add("hidden");
+  customerPanel.classList.add("hidden");
+  messageForm.classList.add("hidden");
+  messagesEl.innerHTML = "";
+  typingPreviewEl.classList.add("hidden");
+}
+
 async function toggleArchive(uid, archived) {
   try {
     const update = archived
       ? { archived: true, archivedAt: serverTimestamp(), expireAt: oneYearFromNow() }
       : { archived: false, archivedAt: null, expireAt: null };
     await setDoc(doc(db, ...wsPath("customers", uid)), update, { merge: true });
+    // Diarsipkan sementara chat ini yang lagi kebuka -> tutup panelnya,
+    // soalnya begitu diarsipkan dia hilang dari daftar Open. Dipulihkan
+    // (un-archive) sengaja TIDAK ikut nutup, biar admin bisa lanjut chat.
+    if (archived && uid === activeCustomerUid) {
+      closeActiveChat();
+    }
   } catch (err) {
     alert("Gagal mengubah status arsip: " + err.message);
   }
@@ -1145,17 +1169,7 @@ async function deleteAllChat(uid, name) {
     await deleteDoc(doc(db, ...wsPath("customers", uid)));
 
     if (uid === activeCustomerUid) {
-      if (unsubMessages) unsubMessages();
-      unsubMessages = null;
-      activeCustomerUid = null;
-      activeCustomerName = "";
-      chatHeaderText.textContent = "Pilih customer di sebelah kiri";
-      updateChatHeaderPresence();
-      infoToggleBtn.classList.add("hidden");
-      customerPanel.classList.add("hidden");
-      messageForm.classList.add("hidden");
-      messagesEl.innerHTML = "";
-      typingPreviewEl.classList.add("hidden");
+      closeActiveChat();
     }
   } catch (err) {
     alert("Gagal menghapus chat: " + err.message);
