@@ -1082,6 +1082,10 @@ function renderCustomerList() {
       archivedTag.textContent = "Arsip";
       nameRow.appendChild(archivedTag);
     }
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "customer-time";
+    timeSpan.textContent = formatListTimestamp(data.lastMessageAt);
+    nameRow.appendChild(timeSpan);
     info.appendChild(nameRow);
 
     const preview = document.createElement("span");
@@ -1255,6 +1259,21 @@ function formatDateWIB(timestamp) {
     year: "numeric",
     timeZone: "Asia/Jakarta"
   });
+}
+
+// Versi ringkas buat daftar customer di sidebar (mirip WhatsApp): jam kalau
+// pesan terakhirnya hari ini, tanggal pendek kalau bukan -- supaya muat di
+// ruang sempit di ujung kanan tiap baris.
+function formatListTimestamp(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "";
+  const date = timestamp.toDate();
+  const dateKeyWIB = (d) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+
+  if (dateKeyWIB(date) === dateKeyWIB(new Date())) {
+    return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Jakarta" });
+  }
+  return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" });
 }
 
 function createDateDivider(label) {

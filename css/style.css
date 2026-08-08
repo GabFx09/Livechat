@@ -599,6 +599,18 @@ button, a, input, textarea {
   border-radius: 999px;
 }
 
+.customer-time {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.user-item.active .customer-time {
+  color: rgba(255, 255, 255, 0.85);
+}
+
 .customer-item .badge.archived-tag {
   background: var(--panel-alt);
   color: var(--text-dim);
