@@ -71,10 +71,11 @@ let presenceIntervalId = null;
 const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis diarsipkan
 
 // Customer dianggap online kalau lastActiveAt (heartbeat dari widget/customer.js
-// tiap 10 detik selagi tab-nya aktif) masih dalam 25 detik terakhir. Ini cuma
-// fallback (koneksi putus/tab crash) -- kasus normal (tab ditutup/dipindah)
-// sudah langsung ketahuan offline lewat sendOfflineSignal() di customer.js.
-const PRESENCE_ONLINE_MS = 25 * 1000;
+// tiap 30 detik selagi tab-nya aktif) masih dalam 70 detik terakhir (2x
+// interval heartbeat + jeda jaringan). Ini cuma fallback (koneksi putus/tab
+// crash) -- kasus normal (tab ditutup/dipindah) sudah langsung ketahuan
+// offline lewat sendOfflineSignal() di customer.js.
+const PRESENCE_ONLINE_MS = 70 * 1000;
 
 function isCustomerOnline(data) {
   if (!data || !data.lastActiveAt) return false;
@@ -871,8 +872,15 @@ async function toggleArchive(uid, archived) {
   }
 }
 
+// limit(300): tanpa batas ini, tiap kali listener ini dipasang (login/buka
+// dashboard) biayanya = 1 baca Firestore x SELURUH histori customer yang
+// pernah ada (termasuk yang sudah diarsipkan sampai 1 tahun) -- makin lama
+// dipakai makin berat. 300 lebih dari cukup untuk percakapan aktif (auto-
+// archive 30 menit menjaga jumlah itu tetap kecil) + arsip beberapa bulan
+// terakhir; kalau nanti histori arsipnya jauh lebih besar dari itu, chat
+// paling lama tidak akan lagi kelihatan di tab Arsip/pencarian.
 function listenCustomers() {
-  const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"));
+  const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"), limit(300));
   onSnapshot(q, (snap) => {
     let shouldPlaySound = false;
     const newMessageNames = [];

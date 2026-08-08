@@ -382,11 +382,14 @@ function handleSessionDeleted() {
   sessionEndedBanner.classList.remove("hidden");
 }
 
-// Kirim lastActiveAt tiap 10 detik selagi tab chat ini sedang aktif/terlihat,
+// Kirim lastActiveAt tiap 30 detik selagi tab chat ini sedang aktif/terlihat,
 // dipakai admin utk menandai customer online/offline di admin.js (lihat
 // isCustomerOnline). Tidak dikirim saat tab di-background supaya statusnya
 // jujur mencerminkan customer masih benar-benar di halaman chat.
-const PRESENCE_HEARTBEAT_MS = 10000;
+// (Sebelumnya 10 detik -- dengan banyak customer aktif bersamaan selama
+// berjam-jam ini jadi sumber tulisan Firestore terbesar dan bikin project
+// kelebihan kuota gratis harian, lihat PRESENCE_ONLINE_MS di admin.js.)
+const PRESENCE_HEARTBEAT_MS = 30000;
 function sendHeartbeat() {
   if (!currentUser || !sessionActive || document.visibilityState !== "visible") return;
   setDoc(
