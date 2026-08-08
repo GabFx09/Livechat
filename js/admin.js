@@ -30,6 +30,11 @@ import {
   initializeAppCheck,
   ReCaptchaV3Provider
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
+import {
+  getDatabase,
+  ref as rtdbRef,
+  onValue
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 import {
   compressImageFile,
@@ -46,6 +51,10 @@ const auth = getAuth(app);
 // Lihat catatan di customer.js: hindari koneksi streaming Firestore yang
 // bisa diblokir diam-diam di beberapa jaringan.
 const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+// Presence (online/offline) dibaca dari Realtime Database (lihat catatan di
+// customer.js) kalau sudah di-setup, fallback ke lastActiveAt Firestore lama
+// kalau belum (rtdb null).
+const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;
 
 if (RECAPTCHA_V3_SITE_KEY && !RECAPTCHA_V3_SITE_KEY.startsWith("PASTE_")) {
   initializeAppCheck(app, {
@@ -77,9 +86,39 @@ const AUTO_ARCHIVE_MS = 30 * 60 * 1000; // 30 menit tanpa pesan baru -> otomatis
 // offline lewat sendOfflineSignal() di customer.js.
 const PRESENCE_ONLINE_MS = 70 * 1000;
 
-function isCustomerOnline(data) {
+// uid -> {online, name, lastActiveAt} dari node presence/{workspaceId} di
+// Realtime Database -- cuma dipakai kalau rtdb tersambung (lihat
+// listenPresence()). lastActiveAt di sini angka epoch-ms biasa (RTDB
+// ServerValue.TIMESTAMP), bukan Firestore Timestamp.
+let presenceMap = new Map();
+let unsubPresence = null;
+
+function isCustomerOnline(uid, data) {
+  if (rtdb) {
+    const p = presenceMap.get(uid);
+    if (!p || !p.online) return false;
+    return typeof p.lastActiveAt === "number" ? Date.now() - p.lastActiveAt < PRESENCE_ONLINE_MS : true;
+  }
   if (!data || !data.lastActiveAt) return false;
   return Date.now() - data.lastActiveAt.toMillis() < PRESENCE_ONLINE_MS;
+}
+
+// Satu listener per workspace (bukan per customer) -- jauh lebih murah
+// daripada heartbeat Firestore lama yang nulis+baca per customer tiap 10
+// detik dan jadi sumber utama kuota gratis harian jebol (lihat memory
+// 2026-08-09).
+function listenPresence() {
+  if (!rtdb) return;
+  if (unsubPresence) unsubPresence();
+  const presRef = rtdbRef(rtdb, `presence/${currentAdmin.workspaceId}`);
+  unsubPresence = onValue(presRef, (snap) => {
+    presenceMap.clear();
+    snap.forEach((child) => {
+      presenceMap.set(child.key, child.val());
+    });
+    renderCustomerList();
+    updateChatHeaderPresence();
+  });
 }
 
 function wsPath(...segments) {
@@ -528,6 +567,7 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   ensureWorkspaceSlug(workspaceId);
 
   listenCustomers();
+  listenPresence();
   listenSavedReplies();
 
   if (autoArchiveIntervalId) clearInterval(autoArchiveIntervalId);
@@ -875,10 +915,21 @@ async function toggleArchive(uid, archived) {
 // limit(300): tanpa batas ini, tiap kali listener ini dipasang (login/buka
 // dashboard) biayanya = 1 baca Firestore x SELURUH histori customer yang
 // pernah ada (termasuk yang sudah diarsipkan sampai 1 tahun) -- makin lama
-// dipakai makin berat. 300 lebih dari cukup untuk percakapan aktif (auto-
-// archive 30 menit menjaga jumlah itu tetap kecil) + arsip beberapa bulan
-// terakhir; kalau nanti histori arsipnya jauh lebih besar dari itu, chat
-// paling lama tidak akan lagi kelihatan di tab Arsip/pencarian.
+// dipakai makin berat. Diurutkan lastMessageAt desc, jadi 300 slot ini
+// otomatis "self-sorting": percakapan yang beneran masih aktif selalu naik
+// ke atas tiap ada pesan baru, hampir mustahil ke-geser keluar; yang
+// ke-geser cuma yang memang sudah lama tidak disentuh. Kalau nanti histori
+// arsipnya jauh lebih besar dari itu, chat paling lama tidak akan lagi
+// kelihatan di tab Arsip/pencarian -- itu trade-off yang disengaja, bukan
+// bug (lihat memory 2026-08-09).
+//
+// Sengaja TIDAK difilter where("archived","==",false): dokumen customer
+// yang dibuat sebelum field itu ada di initialUpdate (lihat customer.js)
+// tidak punya field ini sama sekali, dan Firestore equality filter diam-
+// diam MENGECUALIKAN dokumen yang field-nya tidak ada -- kalau dipasang
+// tanpa backfill data lama dulu, chat aktif lama bisa hilang total dari
+// dashboard. limit(300) + urutan recency di atas sudah cukup buat
+// membatasi biaya tanpa risiko itu.
 function listenCustomers() {
   const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"), limit(300));
   onSnapshot(q, (snap) => {
@@ -956,7 +1007,7 @@ function updateChatHeaderPresence() {
     chatHeaderStatus.className = "chat-header-status hidden";
     return;
   }
-  const online = isCustomerOnline(data);
+  const online = isCustomerOnline(activeCustomerUid, data);
   chatHeaderStatus.textContent = online ? "Online" : "Offline";
   chatHeaderStatus.className = "chat-header-status " + (online ? "online" : "offline");
 }
@@ -1061,7 +1112,7 @@ function renderCustomerList() {
     avatar.appendChild(createPersonIcon());
 
     const presenceDot = document.createElement("span");
-    presenceDot.className = "presence-dot " + (isCustomerOnline(data) ? "online" : "offline");
+    presenceDot.className = "presence-dot " + (isCustomerOnline(uid, data) ? "online" : "offline");
     avatar.appendChild(presenceDot);
 
     li.appendChild(avatar);
@@ -1702,6 +1753,9 @@ settingsLogoutBtn.addEventListener("click", async () => {
     presenceIntervalId = null;
   }
   window.location.hash = "";
+  if (unsubPresence) unsubPresence();
+  unsubPresence = null;
+  presenceMap.clear();
   await signOut(auth);
   currentAdmin = null;
   updateTabNotification(0);

@@ -7,7 +7,8 @@ export const firebaseConfig = {
   projectId: "livechat-saya",
   storageBucket: "livechat-saya.firebasestorage.app",
   messagingSenderId: "47824287496",
-  appId: "1:47824287496:web:b39cc34886dfa1c140debd"
+  appId: "1:47824287496:web:b39cc34886dfa1c140debd",
+  databaseURL: "https://livechat-saya-default-rtdb.asia-southeast1.firebasedatabase.app"
 };
 
 // Site key reCAPTCHA v3 buat Firebase App Check (proteksi anti-bot/spam,

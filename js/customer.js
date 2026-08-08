@@ -22,6 +22,13 @@ import {
   initializeAppCheck,
   ReCaptchaV3Provider
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app-check.js";
+import {
+  getDatabase,
+  ref as rtdbRef,
+  set as rtdbSet,
+  onDisconnect,
+  serverTimestamp as rtdbServerTimestamp
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 import { compressImageFile, showImageLightbox, showImageSendConfirm } from "./image-utils.js";
 import { renderTextWithLinks } from "./text-utils.js";
@@ -34,6 +41,11 @@ const auth = getAuth(app);
 // Firestore tanpa error yang jelas -- ini bikin SDK otomatis pindah ke
 // long-polling biasa kalau streaming tidak jalan, tanpa perlu deteksi manual.
 const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+// Presence (online/offline) lewat Realtime Database, bukan Firestore --
+// lihat catatan lengkap di startPresence() di bawah. rtdb null kalau
+// databaseURL belum di-setup di firebase-config.js, supaya tetap jalan
+// (fallback ke heartbeat Firestore lama) walau RTDB belum di-provision.
+const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;
 
 // Lewati App Check kalau site key belum di-setup admin (lihat
 // firebase-config.js) -- app tetap jalan normal, cuma tanpa proteksi
@@ -368,6 +380,7 @@ function listenSessionAlive(uid) {
 function handleSessionDeleted() {
   if (!sessionActive) return; // sudah ditangani / belum pernah mulai chat
   sessionActive = false;
+  if (rtdb) goOfflineRtdb();
 
   if (unsubMessages) unsubMessages();
   if (unsubCustomerDoc) unsubCustomerDoc();
@@ -382,14 +395,41 @@ function handleSessionDeleted() {
   sessionEndedBanner.classList.remove("hidden");
 }
 
-// Kirim lastActiveAt tiap 30 detik selagi tab chat ini sedang aktif/terlihat,
-// dipakai admin utk menandai customer online/offline di admin.js (lihat
-// isCustomerOnline). Tidak dikirim saat tab di-background supaya statusnya
-// jujur mencerminkan customer masih benar-benar di halaman chat.
-// (Sebelumnya 10 detik -- dengan banyak customer aktif bersamaan selama
-// berjam-jam ini jadi sumber tulisan Firestore terbesar dan bikin project
-// kelebihan kuota gratis harian, lihat PRESENCE_ONLINE_MS di admin.js.)
-const PRESENCE_HEARTBEAT_MS = 30000;
+// Presence (online/offline), diutamakan lewat Realtime Database:
+// onDisconnect() bikin server RTDB sendiri yang nandain offline begitu
+// koneksi putus (tab ditutup, internet mati, dll), tanpa perlu nulis
+// berkala dari klien. Fallback ke heartbeat Firestore lama (setDoc tiap 30
+// detik) kalau rtdb null (databaseURL belum di-setup, lihat
+// firebase-config.js). Ini gantinya heartbeat 10-detik lama yang jadi
+// sumber tulisan/bacaan Firestore terbesar dan bikin kuota gratis harian
+// jebol pas 50 customer aktif bareng -- RTDB dihitung dari
+// bandwidth/penyimpanan, bukan per operasi, jadi jauh lebih murah untuk
+// pola tulis sesering ini (lihat memory 2026-08-09).
+const PRESENCE_HEARTBEAT_MS = 30000; // dipakai fallback Firestore saja
+
+function rtdbPresenceRef(uid) {
+  return rtdbRef(rtdb, `presence/${workspaceId}/${uid}`);
+}
+
+function goOnlineRtdb() {
+  if (!rtdb || !currentUser || !sessionActive) return;
+  const presRef = rtdbPresenceRef(currentUser.uid);
+  // Didaftarkan ulang tiap kali balik online -- RTDB otomatis membatalkan
+  // onDisconnect lama begitu koneksi socket-nya putus, jadi ini aman
+  // dipanggil berulang tanpa numpuk.
+  onDisconnect(presRef).set({ online: false, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() });
+  rtdbSet(presRef, { online: true, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() }).catch(() => {});
+}
+
+function goOfflineRtdb() {
+  if (!rtdb || !currentUser) return;
+  rtdbSet(rtdbPresenceRef(currentUser.uid), {
+    online: false,
+    name: currentUser.name,
+    lastActiveAt: rtdbServerTimestamp()
+  }).catch(() => {});
+}
+
 function sendHeartbeat() {
   if (!currentUser || !sessionActive || document.visibilityState !== "visible") return;
   setDoc(
@@ -416,14 +456,24 @@ function sendOfflineSignal() {
 // setelah sesi lamanya dihapus admin, tanpa reload halaman.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    sendHeartbeat();
+    if (rtdb) goOnlineRtdb();
+    else sendHeartbeat();
+  } else if (rtdb) {
+    goOfflineRtdb();
   } else {
     sendOfflineSignal();
   }
 });
-window.addEventListener("pagehide", sendOfflineSignal);
+window.addEventListener("pagehide", () => {
+  if (rtdb) goOfflineRtdb();
+  else sendOfflineSignal();
+});
 
 function startPresenceHeartbeat() {
+  if (rtdb) {
+    goOnlineRtdb();
+    return;
+  }
   if (presenceIntervalId) clearInterval(presenceIntervalId);
   sendHeartbeat();
   presenceIntervalId = setInterval(sendHeartbeat, PRESENCE_HEARTBEAT_MS);
@@ -695,6 +745,13 @@ startBtn.addEventListener("click", async () => {
       lastMessageAt: serverTimestamp(),
       lastSender: null
     };
+    // Dulu field ini cuma keisi pas pertama kali diarsipkan -- jadi
+    // dokumen customer lama/baru-mulai-chat sempat gak punya field
+    // `archived` sama sekali. Set eksplisit di sini (bukan cuma di
+    // touchCustomerDoc/archiveCustomer) supaya ke depan query admin bisa
+    // aman pakai where("archived","==",...) tanpa diam-diam kelewat
+    // dokumen yang field-nya belum pernah keisi.
+    if (isNewCustomer) initialUpdate.archived = false;
     // Cuma dicatat sekali di awal sesi baru -- dipakai admin.js buat hitung
     // "waktu respon pertama" (lihat recordFirstResponseIfNeeded). Kalau
     // customer lama, jangan sampai ke-reset dan bikin metriknya salah.
