@@ -573,6 +573,7 @@ function listenSavedReplies() {
       textEl.textContent = data.text;
       li.addEventListener("click", () => {
         messageInput.value = data.text;
+        autoResizeMessageInput();
         savedRepliesOverlay.classList.add("hidden");
         messageInput.focus();
       });
@@ -748,6 +749,7 @@ function selectSuggestion(index) {
   const reply = suggestionMatches[index];
   if (!reply) return;
   messageInput.value = reply.text;
+  autoResizeMessageInput();
   closeSuggestions();
   messageInput.focus();
 }
@@ -759,28 +761,50 @@ function closeSuggestions() {
   replySuggestionsEl.innerHTML = "";
 }
 
+// #message-input sekarang <textarea> (bukan <input>) supaya Shift+Enter bisa
+// bikin baris baru -- tingginya menyesuaikan otomatis sampai batas CSS
+// max-height, lewat di situ baru discroll. Dipanggil tiap 'input' DAN tiap
+// value-nya diisi lewat kode (pilih saved reply/suggestion, dikosongkan
+// habis kirim), soalnya set .value lewat JS tidak memicu event 'input'.
+function autoResizeMessageInput() {
+  messageInput.style.height = "auto";
+  messageInput.style.height = messageInput.scrollHeight + "px";
+}
+
 messageInput.addEventListener("input", () => {
+  autoResizeMessageInput();
   suggestionMatches = findSuggestionMatches(messageInput.value);
   suggestionIndex = suggestionMatches.length > 0 ? 0 : -1;
   renderSuggestions();
 });
 
 messageInput.addEventListener("keydown", (e) => {
-  if (suggestionMatches.length === 0) return;
+  if (suggestionMatches.length > 0) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      suggestionIndex = (suggestionIndex + 1) % suggestionMatches.length;
+      renderSuggestions();
+      return;
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      suggestionIndex = (suggestionIndex - 1 + suggestionMatches.length) % suggestionMatches.length;
+      renderSuggestions();
+      return;
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      selectSuggestion(suggestionIndex);
+      return;
+    } else if (e.key === "Escape") {
+      closeSuggestions();
+      return;
+    }
+  }
 
-  if (e.key === "ArrowDown") {
+  // Enter polos = kirim (textarea bawaan cuma bikin baris baru terus, tidak
+  // pernah submit form sendiri), Shift+Enter = baris baru seperti biasa.
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    suggestionIndex = (suggestionIndex + 1) % suggestionMatches.length;
-    renderSuggestions();
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    suggestionIndex = (suggestionIndex - 1 + suggestionMatches.length) % suggestionMatches.length;
-    renderSuggestions();
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    selectSuggestion(suggestionIndex);
-  } else if (e.key === "Escape") {
-    closeSuggestions();
+    messageForm.requestSubmit();
   }
 });
 
@@ -1471,6 +1495,7 @@ messageForm.addEventListener("submit", async (e) => {
   const text = messageInput.value.trim();
   if (!text || !activeCustomerUid) return;
   messageInput.value = "";
+  autoResizeMessageInput();
 
   try {
     await writeMessage(activeCustomerUid, {
