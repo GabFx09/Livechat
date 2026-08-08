@@ -1400,6 +1400,7 @@ function startEditMessage(messageId, currentText, bubbleEl) {
         editedAt: serverTimestamp()
       });
       indexSearchText(activeCustomerUid, newText);
+      refreshLastMessagePreview(activeCustomerUid);
     } catch (err) {
       alert("Gagal menyimpan perubahan: " + err.message);
       saveBtn.disabled = false;
@@ -1412,6 +1413,7 @@ async function deleteMessage(messageId) {
   if (!confirm("Hapus pesan ini?")) return;
   try {
     await deleteDoc(doc(db, ...wsPath("chats", activeCustomerUid, "messages", messageId)));
+    refreshLastMessagePreview(activeCustomerUid);
   } catch (err) {
     alert("Gagal menghapus pesan: " + err.message);
   }
@@ -1474,6 +1476,33 @@ async function touchCustomerDoc(lastMessage) {
     },
     { merge: true }
   );
+}
+
+// Dipanggil habis edit/hapus 1 pesan supaya preview "pesan terakhir" di
+// daftar customer (sidebar) tidak ketinggalan nunjukin teks yang sudah
+// diedit/dihapus -- beda dari touchCustomerDoc() yang khusus buat pesan BARU
+// dari admin (reset unreadCount, buka arsip, dst), ini cuma nyamain preview
+// dengan pesan yang BENERAN masih ada sekarang, tidak nyentuh field lain.
+async function refreshLastMessagePreview(uid) {
+  try {
+    const snap = await getDocs(
+      query(collection(db, ...wsPath("chats", uid, "messages")), orderBy("timestamp", "desc"), limit(1))
+    );
+    const last = snap.docs[0] && snap.docs[0].data();
+    const preview = !last ? "" : last.type === "image" ? "📷 Gambar" : last.text || "";
+
+    await setDoc(
+      doc(db, ...wsPath("customers", uid)),
+      {
+        lastMessage: preview,
+        lastMessageAt: last ? last.timestamp : null,
+        lastSender: last ? last.sender : null
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("Gagal memperbarui preview pesan terakhir:", err);
+  }
 }
 
 function indexSearchText(uid, text) {

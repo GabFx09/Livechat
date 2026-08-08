@@ -489,10 +489,23 @@ function indexSearchText(text) {
 // searchText -- jadi nambah jenis pesan baru nanti tidak akan lagi
 // kelewatan diindeks kayak yang sempat kejadian di fitur auto-chat
 // (searchText cuma keisi lewat touchCustomerDoc, padahal pesan bot tidak
-// pernah lewat situ).
+// pernah lewat situ). Preview "pesan terakhir" di sidebar admin (lastMessage/
+// lastMessageAt/lastSender) juga selalu disamakan di sini dengan alasan yang
+// sama -- sapaan/menu/balasan otomatis lewat writeMessage() langsung, bukan
+// touchCustomerDoc(), jadi tanpa ini previewnya nyangkut di pesan sebelumnya
+// (mis. masih nunjukin label pilihan yang diklik customer, padahal sudah
+// disusul balasan otomatis).
 async function writeMessage(uid, messageData) {
   await addDoc(collection(db, ...wsPath("chats", uid, "messages")), messageData);
   if (messageData.text) indexSearchText(messageData.text);
+
+  const preview =
+    messageData.type === "image" ? "📷 Gambar" : messageData.type === "options" ? "📋 Menu pilihan" : messageData.text || "";
+  setDoc(
+    doc(db, ...wsPath("customers", uid)),
+    { lastMessage: preview, lastMessageAt: serverTimestamp(), lastSender: messageData.sender },
+    { merge: true }
+  ).catch(() => {});
 }
 
 // Kirim draf ketikan customer ke admin secara real-time (di-debounce supaya
