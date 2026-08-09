@@ -175,6 +175,35 @@ function applyThemeColor(hex) {
   document.documentElement.style.setProperty("--accent", hex);
 }
 
+// Cache branding di localStorage (per workspace) supaya kunjungan
+// BERIKUTNYA dari browser yang sama bisa langsung tampil branding asli
+// sejak awal (bukan kedipan biru/"Customer Service" default dulu baru
+// ganti) -- lihat init(). Selalu ditimpa ulang tiap kali data asli dari
+// Firestore selesai diambil, jadi kalau admin ganti branding, kunjungan
+// berikutnya tetap ke-refresh (cache cuma mempercepat tampilan AWAL, bukan
+// sumber kebenaran).
+const BRAND_CACHE_PREFIX = "lc_brand_";
+
+function loadCachedBranding() {
+  try {
+    const raw = localStorage.getItem(BRAND_CACHE_PREFIX + workspaceId);
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveCachedBranding(brandName, themeColor, headerLogoBase64) {
+  try {
+    localStorage.setItem(
+      BRAND_CACHE_PREFIX + workspaceId,
+      JSON.stringify({ brandName: brandName || null, themeColor: themeColor || null, headerLogoBase64: headerLogoBase64 || null })
+    );
+  } catch (err) {
+    // localStorage penuh/diblokir (mis. mode privat) -- gak krusial, abaikan
+  }
+}
+
 function updateOfflineBanners() {
   const online = isWithinBusinessHours(businessHours);
   const message = (businessHours && businessHours.offlineMessage) ||
@@ -869,6 +898,7 @@ async function loadInitialDataInBackground() {
       if (wsData.brandName) applyBrandName(wsData.brandName);
       if (wsData.themeColor) applyThemeColor(wsData.themeColor);
       if (wsData.headerLogoBase64) applyHeaderLogo(wsData.headerLogoBase64);
+      saveCachedBranding(wsData.brandName, wsData.themeColor, wsData.headerLogoBase64);
       autoGreetingEnabled = !!wsData.autoGreetingEnabled;
       autoGreetingMessage = wsData.autoGreetingMessage || "";
       autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
@@ -912,8 +942,18 @@ function init() {
     return;
   }
 
-  // Langsung tampilkan form "Mulai Chat" (branding generik dulu) tanpa
-  // nunggu Firebase selesai -- lihat catatan di loadInitialDataInBackground().
+  // Langsung tampilkan form "Mulai Chat" tanpa nunggu Firebase selesai --
+  // lihat catatan di loadInitialDataInBackground(). Kalau browser ini
+  // pernah buka workspace ini sebelumnya, pakai branding dari cache dulu
+  // (lihat loadCachedBranding) supaya gak kedipan default->asli lagi;
+  // kalau belum pernah, tetap default dulu seperti biasa.
+  const cached = loadCachedBranding();
+  if (cached) {
+    if (cached.brandName) applyBrandName(cached.brandName);
+    if (cached.themeColor) applyThemeColor(cached.themeColor);
+    if (cached.headerLogoBase64) applyHeaderLogo(cached.headerLogoBase64);
+  }
+
   loadingScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
 
