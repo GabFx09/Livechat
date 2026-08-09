@@ -71,8 +71,8 @@ function extractWorkspaceIdFromPath() {
   return last;
 }
 
-// Bukan const -- bisa dikoreksi di resolveWorkspaceSnap() kalau ternyata ID
-// di URL ini cuma versi huruf-kecil dari ID asli (lihat catatan di sana).
+// Bukan const -- bisa dikoreksi di resolveWorkspaceDataFast() kalau ternyata
+// ID di URL ini cuma versi huruf-kecil dari ID asli (lihat catatan di sana).
 let workspaceId =
   new URLSearchParams(window.location.search).get("w") || extractWorkspaceIdFromPath();
 
@@ -853,26 +853,69 @@ async function withRetries(fn, maxAttempts = 3) {
   }
 }
 
-async function resolveWorkspaceSnap() {
-  let wsSnap = await getDoc(doc(db, ...wsPath()));
-  if (!wsSnap.exists()) {
+// Ambil dokumen workspace/workspaceSlugs lewat REST API Firestore langsung
+// (fetch mentah), BUKAN lewat SDK (getDoc) -- persis pola yang sudah lama
+// dipakai widget.js buat hal yang sama. SDK Firestore/Auth di sini selalu
+// nunggu App Check ngambil token reCAPTCHA v3 dulu sebelum request-nya
+// beneran ditembak (berlaku ke SEMUA panggilan lewat SDK, termasuk yang
+// rule-nya publik kayak dokumen ini) -- itu ternyata jadi bottleneck utama
+// yang masih nyisa walau sudah dipisah dari sign-in. Kedua koleksi ini
+// (workspaces, workspaceSlugs) memang allow-read-if-true di
+// firestore.rules, jadi fetch mentah tanpa App Check tetap sah/diizinkan
+// server, cuma lompat App Check yang gak perlu-perlu amat buat baca data
+// yang toh sudah publik.
+function unwrapFirestoreValue(v) {
+  if (!v) return undefined;
+  if ("stringValue" in v) return v.stringValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("integerValue" in v) return Number(v.integerValue);
+  if ("doubleValue" in v) return Number(v.doubleValue);
+  if ("arrayValue" in v) return ((v.arrayValue.values) || []).map(unwrapFirestoreValue);
+  if ("mapValue" in v) {
+    const out = {};
+    const fields = (v.mapValue && v.mapValue.fields) || {};
+    for (const k in fields) out[k] = unwrapFirestoreValue(fields[k]);
+    return out;
+  }
+  if ("nullValue" in v) return null;
+  return undefined;
+}
+
+async function fetchFirestoreDocRest(...pathSegments) {
+  const url =
+    "https://firestore.googleapis.com/v1/projects/" +
+    firebaseConfig.projectId +
+    "/databases/(default)/documents/" +
+    pathSegments.map(encodeURIComponent).join("/");
+  const res = await fetch(url);
+  if (res.status === 404) return null; // dokumennya emang belum ada, bukan error
+  if (!res.ok) throw new Error("Firestore REST fetch gagal (" + res.status + ")");
+  const json = await res.json();
+  if (!json || !json.fields) return null;
+  const out = {};
+  for (const k in json.fields) out[k] = unwrapFirestoreValue(json.fields[k]);
+  return out;
+}
+
+async function resolveWorkspaceDataFast() {
+  let wsData = await fetchFirestoreDocRest("workspaces", workspaceId);
+  if (!wsData) {
     // ID workspace asli case-sensitive, tapi sebagian CMS/website
     // perusahaan otomatis mengubah URL yang ditempel jadi huruf kecil
     // semua (dianggap "slug") -- kalau ID persis tidak ketemu, coba tabel
     // alias huruf-kecil (dibuat otomatis tiap admin login, lihat admin.js
     // ensureWorkspaceSlug) sebelum benar-benar menyerah.
-    const slugSnap = await getDoc(doc(db, "workspaceSlugs", workspaceId.toLowerCase()));
-    if (slugSnap.exists() && slugSnap.data().workspaceId) {
-      workspaceId = slugSnap.data().workspaceId;
-      wsSnap = await getDoc(doc(db, ...wsPath()));
+    const slugData = await fetchFirestoreDocRest("workspaceSlugs", workspaceId.toLowerCase());
+    if (slugData && slugData.workspaceId) {
+      workspaceId = slugData.workspaceId;
+      wsData = await fetchFirestoreDocRest("workspaces", workspaceId);
     }
   }
-  return wsSnap;
+  return wsData;
 }
 
-function applyWorkspaceData(wsSnap) {
-  if (!wsSnap || !wsSnap.exists()) return;
-  const wsData = wsSnap.data();
+function applyWorkspaceData(wsData) {
+  if (!wsData) return;
   if (wsData.brandName) applyBrandName(wsData.brandName);
   if (wsData.themeColor) applyThemeColor(wsData.themeColor);
   if (wsData.headerLogoBase64) applyHeaderLogo(wsData.headerLogoBase64);
@@ -900,20 +943,19 @@ function applyWorkspaceData(wsSnap) {
 
 // Dua alur ini ditembak BERSAMAAN dan SALING GAK NUNGGU, bukan satu
 // sesudah yang lain:
-// - Branding (dokumen workspace) public-read, gak butuh sign-in sama
-//   sekali (lihat firestore.rules) -- jadi bisa langsung tampil begitu
-//   baca Firestore-nya selesai, tanpa ikut nunggu proses sign-in anonim +
-//   App Check yang biasanya lebih lambat. onBrandingSettled dipanggil begitu
-//   ini selesai (berhasil ATAU akhirnya menyerah) -- dipakai init() buat
-//   nunggu branding asli (kalau sempat) sebelum form ditampilkan, lihat
-//   GRACE_MS di sana.
-// - Auto-rejoin BUTUH uid (hasil sign-in) buat tahu dokumen customer mana
-//   yang harus dicek, jadi tetap nunggu sign-in duluan -- tapi ini gak lagi
-//   menahan branding supaya nongol bareng.
+// - Branding (dokumen workspace) diambil lewat REST langsung
+//   (resolveWorkspaceDataFast), gak lewat SDK -- lihat catatan panjang di
+//   situ soal kenapa. onBrandingSettled dipanggil begitu ini selesai
+//   (berhasil ATAU akhirnya menyerah) -- dipakai init() buat nunggu
+//   branding asli (kalau sempat) sebelum form ditampilkan, lihat GRACE_MS
+//   di sana.
+// - Auto-rejoin BUTUH uid (hasil sign-in lewat SDK) buat tahu dokumen
+//   customer mana yang harus dicek, jadi tetap lewat jalur SDK+App Check
+//   biasa -- tapi ini gak lagi menahan branding supaya nongol bareng.
 function loadInitialDataInBackground(onBrandingSettled) {
   withRetries(async () => {
-    const wsSnap = await resolveWorkspaceSnap();
-    applyWorkspaceData(wsSnap);
+    const wsData = await resolveWorkspaceDataFast();
+    applyWorkspaceData(wsData);
   }).finally(() => {
     if (onBrandingSettled) onBrandingSettled();
   });
