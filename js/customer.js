@@ -903,17 +903,19 @@ function applyWorkspaceData(wsSnap) {
 // - Branding (dokumen workspace) public-read, gak butuh sign-in sama
 //   sekali (lihat firestore.rules) -- jadi bisa langsung tampil begitu
 //   baca Firestore-nya selesai, tanpa ikut nunggu proses sign-in anonim +
-//   App Check yang biasanya lebih lambat.
+//   App Check yang biasanya lebih lambat. onBrandingSettled dipanggil begitu
+//   ini selesai (berhasil ATAU akhirnya menyerah) -- dipakai init() buat
+//   nunggu branding asli (kalau sempat) sebelum form ditampilkan, lihat
+//   GRACE_MS di sana.
 // - Auto-rejoin BUTUH uid (hasil sign-in) buat tahu dokumen customer mana
 //   yang harus dicek, jadi tetap nunggu sign-in duluan -- tapi ini gak lagi
 //   menahan branding supaya nongol bareng.
-// Keduanya dipanggil dari init() SETELAH layar "Mulai Chat" sudah
-// kelihatan (lihat init()) -- form itu sendiri gak butuh data apa pun buat
-// ditampilkan duluan.
-function loadInitialDataInBackground() {
+function loadInitialDataInBackground(onBrandingSettled) {
   withRetries(async () => {
     const wsSnap = await resolveWorkspaceSnap();
     applyWorkspaceData(wsSnap);
+  }).finally(() => {
+    if (onBrandingSettled) onBrandingSettled();
   });
 
   withRetries(async () => {
@@ -940,11 +942,10 @@ function init() {
     return;
   }
 
-  // Langsung tampilkan form "Mulai Chat" tanpa nunggu Firebase selesai --
-  // lihat catatan di loadInitialDataInBackground(). Kalau browser ini
-  // pernah buka workspace ini sebelumnya, pakai branding dari cache dulu
-  // (lihat loadCachedBranding) supaya gak kedipan default->asli lagi;
-  // kalau belum pernah, tetap default dulu seperti biasa.
+  // Kalau browser ini pernah buka workspace ini sebelumnya, pakai branding
+  // dari cache (lihat loadCachedBranding) -- branding-nya sudah pasti
+  // benar, jadi form langsung ditampilkan seketika, gak perlu nunggu apa
+  // pun lagi.
   const cached = loadCachedBranding();
   if (cached) {
     if (cached.brandName) applyBrandName(cached.brandName);
@@ -952,10 +953,28 @@ function init() {
     if (cached.headerLogoBase64) applyHeaderLogo(cached.headerLogoBase64);
   }
 
-  loadingScreen.classList.add("hidden");
-  loginScreen.classList.remove("hidden");
+  let revealed = false;
+  function revealLoginScreen() {
+    if (revealed) return;
+    revealed = true;
+    loadingScreen.classList.add("hidden");
+    loginScreen.classList.remove("hidden");
+  }
 
-  loadInitialDataInBackground();
+  if (cached) {
+    revealLoginScreen();
+  } else {
+    // Kunjungan pertama (belum ada cache) -- kasih jeda SINGKAT buat nunggu
+    // branding asli kebaca dulu sebelum form ditampilkan, supaya customer
+    // tidak sempat lihat branding default (biru/"Customer Service") sama
+    // sekali kalau jaringannya cukup cepat. GRACE_MS cuma jaring pengaman
+    // kalau lambat/gagal -- form tetap ditampilkan (branding default) biar
+    // customer tidak macet nunggu selamanya, sama seperti sebelumnya.
+    const GRACE_MS = 1200;
+    setTimeout(revealLoginScreen, GRACE_MS);
+  }
+
+  loadInitialDataInBackground(revealLoginScreen);
 }
 
 init();
