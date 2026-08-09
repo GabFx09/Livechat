@@ -2,10 +2,19 @@
   "rules": {
     "presence": {
       "$workspaceId": {
-        ".read": "auth != null",
+        ".read": "auth != null && root.child('presenceAdmins').child($workspaceId).child(auth.uid).val() === true",
         "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
           ".write": "auth != null && auth.uid === $uid",
-          ".validate": "newData.hasChildren(['online', 'lastActiveAt'])"
+          ".validate": "newData.hasChildren(['online', 'lastActiveAt']) && newData.child('online').isBoolean() && newData.child('lastActiveAt').isNumber()"
+        }
+      }
+    },
+    "presenceAdmins": {
+      "$workspaceId": {
+        "$adminUid": {
+          ".read": "auth != null && auth.uid === $adminUid",
+          ".write": "auth != null && auth.uid === $adminUid"
         }
       }
     },

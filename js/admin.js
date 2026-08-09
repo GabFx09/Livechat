@@ -24,7 +24,8 @@ import {
   arrayUnion,
   increment,
   where,
-  documentId
+  documentId,
+  getCountFromServer
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import {
   initializeAppCheck,
@@ -33,6 +34,7 @@ import {
 import {
   getDatabase,
   ref as rtdbRef,
+  set as rtdbSet,
   onValue
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 import { firebaseConfig, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
@@ -95,9 +97,16 @@ let unsubPresence = null;
 
 function isCustomerOnline(uid, data) {
   if (rtdb) {
+    // Beda dari heartbeat Firestore lama: TIDAK dicek basi-tidaknya
+    // lastActiveAt di sini. customer.js cuma nulis ulang lastActiveAt pas
+    // sesi mulai/tab balik ke visible, bukan berkala selama tab tetap
+    // dibuka (itu kan justru yang mau dihindari) -- jadi kalau tetap pakai
+    // ambang waktu kayak jalur Firestore, customer yang lagi aktif ngetik
+    // tanpa pindah tab akan salah kelihatan "Offline" setelah
+    // PRESENCE_ONLINE_MS. RTDB onDisconnect() sudah cukup diandalkan buat
+    // nge-flip online:false begitu koneksinya beneran putus.
     const p = presenceMap.get(uid);
-    if (!p || !p.online) return false;
-    return typeof p.lastActiveAt === "number" ? Date.now() - p.lastActiveAt < PRESENCE_ONLINE_MS : true;
+    return !!(p && p.online);
   }
   if (!data || !data.lastActiveAt) return false;
   return Date.now() - data.lastActiveAt.toMillis() < PRESENCE_ONLINE_MS;
@@ -107,8 +116,35 @@ function isCustomerOnline(uid, data) {
 // daripada heartbeat Firestore lama yang nulis+baca per customer tiap 10
 // detik dan jadi sumber utama kuota gratis harian jebol (lihat memory
 // 2026-08-09).
-function listenPresence() {
+//
+// RTDB rules gak bisa nge-query data Firestore (dua produk terpisah), jadi
+// gak bisa langsung cek "uid ini admin workspace X beneran?" dari sana
+// kayak isWorkspaceAdmin() di firestore.rules. Makanya begitu admin login,
+// dicatat juga penanda kecil presenceAdmins/{workspaceId}/{uid}=true di
+// RTDB (self-heal, pola yang sama dengan ensureWorkspaceSlug) -- database.
+// rules.json pakai penanda ini buat batasi baca presence/{workspaceId}
+// cuma ke admin workspace itu sendiri, bukan siapa saja yang login
+// (termasuk customer anonim dari workspace lain), supaya nama & status
+// online customer tidak bocor lintas-tenant.
+async function ensurePresenceAdminMarker() {
   if (!rtdb) return;
+  try {
+    await rtdbSet(
+      rtdbRef(rtdb, `presenceAdmins/${currentAdmin.workspaceId}/${currentAdmin.uid}`),
+      true
+    );
+  } catch (err) {
+    console.error("Gagal menandai presenceAdmins:", err);
+  }
+}
+
+// Ditunggu (await) dulu sebelum listener presence dipasang -- kalau tidak,
+// pembacaan presence/{workspaceId} pertama bisa nyampe duluan sebelum
+// penanda presenceAdmins-nya kesimpen, ditolak rules (permission-denied)
+// pas admin baru pertama kali login/buka dashboard.
+async function listenPresence() {
+  if (!rtdb) return;
+  await ensurePresenceAdminMarker();
   if (unsubPresence) unsubPresence();
   const presRef = rtdbRef(rtdb, `presence/${currentAdmin.workspaceId}`);
   unsubPresence = onValue(presRef, (snap) => {
@@ -663,7 +699,20 @@ async function openStats() {
   customersDataMap.forEach((data) => {
     if (!data.archived) openCount += 1;
   });
-  statsTotalCustomers.textContent = String(customersDataMap.size);
+  // customersDataMap cuma nyimpen 300 customer paling baru (lihat
+  // listenCustomers()), jadi gak bisa dipakai buat "Total Pelanggan" kalau
+  // workspace-nya sudah pernah lebih dari 300 customer sepanjang
+  // sejarahnya -- getCountFromServer() hitung langsung dari server (murah,
+  // gak perlu baca semua dokumennya) supaya angkanya tetap akurat walau
+  // histori customer-nya sudah lewat batas listener itu.
+  statsTotalCustomers.textContent = "…";
+  getCountFromServer(collection(db, ...wsPath("customers")))
+    .then((snap) => {
+      statsTotalCustomers.textContent = String(snap.data().count);
+    })
+    .catch(() => {
+      statsTotalCustomers.textContent = String(customersDataMap.size);
+    });
   statsOpenCustomers.textContent = String(openCount);
 
   const DAYS = 30;

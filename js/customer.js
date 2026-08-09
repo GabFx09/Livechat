@@ -417,23 +417,27 @@ function rtdbPresenceRef(uid) {
   return rtdbRef(rtdb, `presence/${workspaceId}/${uid}`);
 }
 
+// Bikin sekali di sini, dipakai baik oleh payload online maupun offline
+// (langsung & lewat onDisconnect) -- supaya ubah bentuk datanya nanti cukup
+// di satu tempat, gak keselip di salah satu dari 3 titik yang sebelumnya
+// masing-masing punya literal sendiri.
+function presencePayload(online) {
+  return { online, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() };
+}
+
 function goOnlineRtdb() {
   if (!rtdb || !currentUser || !sessionActive) return;
   const presRef = rtdbPresenceRef(currentUser.uid);
   // Didaftarkan ulang tiap kali balik online -- RTDB otomatis membatalkan
   // onDisconnect lama begitu koneksi socket-nya putus, jadi ini aman
   // dipanggil berulang tanpa numpuk.
-  onDisconnect(presRef).set({ online: false, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() });
-  rtdbSet(presRef, { online: true, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() }).catch(() => {});
+  onDisconnect(presRef).set(presencePayload(false));
+  rtdbSet(presRef, presencePayload(true)).catch(() => {});
 }
 
 function goOfflineRtdb() {
   if (!rtdb || !currentUser) return;
-  rtdbSet(rtdbPresenceRef(currentUser.uid), {
-    online: false,
-    name: currentUser.name,
-    lastActiveAt: rtdbServerTimestamp()
-  }).catch(() => {});
+  rtdbSet(rtdbPresenceRef(currentUser.uid), presencePayload(false)).catch(() => {});
 }
 
 function sendHeartbeat() {
