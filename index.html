@@ -7,6 +7,15 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Domain Firebase/Google yang dipakai di jalur loading customer.js (SDK,
+     Firestore, Auth anonim, App Check/reCAPTCHA) -- preconnect di sini bikin
+     browser mulai DNS+TLS handshake-nya SEKARANG (paralel sama parsing HTML),
+     bukan nunggu baru mulai pas request pertama beneran ditembak. -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+<link rel="preconnect" href="https://content-firebaseappcheck.googleapis.com" crossorigin />
+<link rel="preconnect" href="https://www.google.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
