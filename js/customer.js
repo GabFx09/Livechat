@@ -77,6 +77,12 @@ let workspaceId =
   new URLSearchParams(window.location.search).get("w") || extractWorkspaceIdFromPath();
 
 let currentUser = null; // { uid, name }
+// Snapshot customers/{uid} yang sudah diambil init() -- dipakai ulang oleh
+// klik "Mulai Chat" (lihat startBtn) supaya gak nge-getDoc dokumen yang
+// sama dua kali (satu di init(), satu lagi begitu diklik) cuma buat ngecek
+// isNewCustomer, yang nambah 1 round-trip ke Firestore sebelum chat-nya
+// kebuka.
+let initialCustomerSnap = null;
 let workspaceBrandName = null;
 let autoGreetingEnabled = false;
 let autoGreetingMessage = "";
@@ -735,7 +741,9 @@ startBtn.addEventListener("click", async () => {
 
   try {
     const user = await ensureSignedIn();
-    const existingSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
+    // Dipakai ulang dari init() (lihat initialCustomerSnap) kalau ada --
+    // fallback getDoc cuma buat jaga-jaga kalau entah kenapa belum keisi.
+    const existingSnap = initialCustomerSnap || (await getDoc(doc(db, ...wsPath("customers", user.uid))));
     const isNewCustomer = !existingSnap.exists();
     optionSelectCount = isNewCustomer ? 0 : existingSnap.data().optionSelectCount || 0;
 
@@ -853,6 +861,7 @@ async function init() {
 
   try {
     const { user, wsSnap, customerSnap } = loaded;
+    initialCustomerSnap = customerSnap;
     if (wsSnap.exists()) {
       const wsData = wsSnap.data();
       if (wsData.brandName) applyBrandName(wsData.brandName);
