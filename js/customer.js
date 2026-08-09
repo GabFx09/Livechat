@@ -835,17 +835,19 @@ async function loadInitialData() {
   return { user, wsSnap, customerSnap };
 }
 
-async function init() {
-  if (!workspaceId) {
-    loadingScreen.classList.add("hidden");
-    workspaceErrorScreen.classList.remove("hidden");
-    return;
-  }
-
+// Ambil data workspace/customer & terapkan hasilnya SETELAH layar "Mulai
+// Chat" sudah kelihatan (lihat init()) -- bukan sebelum. Login/koneksi ke
+// Firebase (sign-in anonim + App Check/reCAPTCHA + 2 baca Firestore) bisa
+// makan beberapa detik, padahal form "Mulai Chat" itu sendiri gak butuh
+// data apa pun buat ditampilkan. Jadi jalur ini murni "upgrade" tampilan
+// begitu datanya sampai: ganti branding generik jadi branding asli, dan
+// auto-rejoin kalau ternyata browser ini sudah pernah chat sebelumnya.
+async function loadInitialDataInBackground() {
   // Coba beberapa kali sebelum menyerah -- WiFi/data seluler yang putus
-  // sesaat pas halaman baru dibuka sebelumnya bikin sign-in/ambil data
-  // workspace gagal diam-diam, jatuh ke tampilan default (nama & warna
-  // generik) tanpa pesan error apa pun ke customer.
+  // sesaat pas halaman baru dibuka bikin sign-in/ambil data workspace
+  // gagal diam-diam. Customer tetap bisa pakai form yang sudah kelihatan
+  // (branding generik) walau semua percobaan gagal -- klik "Mulai Chat"
+  // nanti akan coba lagi sendiri (lihat startBtn).
   const MAX_ATTEMPTS = 3;
   let loaded = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -854,11 +856,7 @@ async function init() {
       break;
     } catch (err) {
       console.error(`Gagal memuat workspace (percobaan ${attempt}/${MAX_ATTEMPTS}):`, err);
-      if (attempt === MAX_ATTEMPTS) {
-        loginScreen.classList.remove("hidden");
-        loadingScreen.classList.add("hidden");
-        return;
-      }
+      if (attempt === MAX_ATTEMPTS) return;
       await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
     }
   }
@@ -892,20 +890,34 @@ async function init() {
       setInterval(updateOfflineBanners, 60000);
     }
 
-    // Auto rejoin kalau browser ini sudah pernah chat sebelumnya.
-    if (customerSnap.exists() && customerSnap.data().name) {
+    // Auto rejoin kalau browser ini sudah pernah chat sebelumnya -- TAPI
+    // cuma kalau customer belum keburu mulai sesi baru sendiri lewat form
+    // yang sudah kelihatan duluan (lihat sessionActive di enterChat()).
+    // Kalau sudah, jangan diapa-apain lagi di sini -- sesi yang lagi
+    // jalan itu yang menang, bukan hasil auto-rejoin yang telat datang.
+    if (!sessionActive && customerSnap.exists() && customerSnap.data().name) {
       optionSelectCount = customerSnap.data().optionSelectCount || 0;
       enterChat(user.uid, customerSnap.data().name);
       captureVisitorInfo(user.uid);
-    } else {
-      loginScreen.classList.remove("hidden");
     }
   } catch (err) {
     console.error("Gagal memuat workspace:", err);
-    loginScreen.classList.remove("hidden");
-  } finally {
-    loadingScreen.classList.add("hidden");
   }
+}
+
+function init() {
+  if (!workspaceId) {
+    loadingScreen.classList.add("hidden");
+    workspaceErrorScreen.classList.remove("hidden");
+    return;
+  }
+
+  // Langsung tampilkan form "Mulai Chat" (branding generik dulu) tanpa
+  // nunggu Firebase selesai -- lihat catatan di loadInitialDataInBackground().
+  loadingScreen.classList.add("hidden");
+  loginScreen.classList.remove("hidden");
+
+  loadInitialDataInBackground();
 }
 
 init();
