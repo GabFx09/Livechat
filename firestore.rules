@@ -105,6 +105,20 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/workspaces/$(workspaceId)/admins/$(request.auth.uid));
       }
 
+      // Role admin ada 2: "operator" (default -- termasuk dokumen admin lama
+      // yang belum punya field role sama sekali, biar gak tiba-tiba
+      // kekunci) bisa lakuin apa saja; "superadmin" cuma boleh
+      // lihat+ekspor chat, gak bisa kirim pesan/arsip/hapus/ubah
+      // pengaturan. Role diisi manual lewat Firebase Console (lihat
+      // README 4b) -- sengaja TIDAK ada cara ubah role sendiri lewat
+      // aplikasi (lihat pembatasan field di allow update admins/{adminId}
+      // di bawah), supaya superadmin gak bisa nurunin diri sendiri jadi
+      // operator buat lolos dari pembatasan ini.
+      function isWorkspaceOperator() {
+        return isWorkspaceAdmin() &&
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)/admins/$(request.auth.uid)).data.get('role', 'operator') != 'superadmin';
+      }
+
       // Anti-spam ringan buat pesan customer (lihat pemakaiannya di
       // chats/{customerId}/messages di bawah): tolak kalau belum 500ms
       // sejak pesan sebelumnya dari customer yg sama. Tidak kerasa buat
@@ -117,7 +131,7 @@ service cloud.firestore {
           request.time > cust.data.lastMessageAt + duration.value(500, 'ms');
       }
 
-      allow update: if isWorkspaceAdmin() &&
+      allow update: if isWorkspaceOperator() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['brandName', 'themeColor', 'bubbleIcon', 'bubbleImageBase64', 'headerLogoBase64',
            'bubbleAnimation', 'proactiveGreetingEnabled', 'proactiveGreetingText',
@@ -138,7 +152,12 @@ service cloud.firestore {
           request.auth.uid == adminId &&
           workspaceClaimedBySelf(workspaceId);
 
-        allow update: if request.auth != null && request.auth.uid == adminId;
+        // hasOnly(['name','photo']) -- sengaja TIDAK termasuk 'role' di
+        // sini, supaya admin (operator maupun superadmin) tidak bisa ubah
+        // role diri sendiri lewat aplikasi. Lihat catatan di
+        // isWorkspaceOperator() di atas.
+        allow update: if request.auth != null && request.auth.uid == adminId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'photo']);
         allow delete: if false;
 
         match /savedReplies/{replyId} {
@@ -155,11 +174,20 @@ service cloud.firestore {
         allow create: if request.auth != null && request.auth.uid == customerId;
 
         allow update: if request.auth != null && request.auth.uid == customerId;
-        allow update: if isWorkspaceAdmin();
+
+        // Buka chat = reset unreadCount ke 0 (nandain "sudah dilihat") --
+        // ini diizinkan admin role apa pun (termasuk superadmin), beda dari
+        // operasi lain di bawah (arsip dst) yang cuma operator, karena ini
+        // bukan "mengubah" data customer, cuma nandain sudah dibaca.
+        allow update: if isWorkspaceAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadCount']);
+
+        allow update: if isWorkspaceOperator();
 
         // Admin boleh hapus dokumen customer, dipakai fitur "Hapus Semua Chat"
         // (menghapus profil + sesi customer sekaligus, bukan customer sendiri).
-        allow delete: if isWorkspaceAdmin();
+        // Cuma operator -- superadmin cuma boleh lihat+ekspor.
+        allow delete: if isWorkspaceOperator();
       }
 
       // chats/{customerId}/messages = isi percakapan customer tsb dengan admin workspace ini.
@@ -180,7 +208,7 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId)) &&
           customerNotSpamming(customerId);
 
-        allow create: if isWorkspaceAdmin() &&
+        allow create: if isWorkspaceOperator() &&
           request.resource.data.sender == 'admin' &&
           request.resource.data.senderId == request.auth.uid &&
           request.resource.data.type in ['text', 'image'];
@@ -226,7 +254,7 @@ service cloud.firestore {
             get(/databases/$(database)/documents/workspaces/$(workspaceId))
               .data.autoGreetingOptionReplies[request.resource.data.optionLabel];
 
-        allow update: if isWorkspaceAdmin() &&
+        allow update: if isWorkspaceOperator() &&
           resource.data.sender == 'admin' &&
           resource.data.senderId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt']);
@@ -234,19 +262,22 @@ service cloud.firestore {
         // Hapus per-pesan dari UI dibatasi ke pesan admin sendiri (lihat
         // isOwnMessage di admin.js, tombol hapus cuma muncul di situ), tapi
         // fitur "Hapus Semua Chat" perlu menghapus pesan customer juga --
-        // jadi izin di sini dibuka untuk admin workspace ybs secara umum.
-        allow delete: if isWorkspaceAdmin();
+        // jadi izin di sini dibuka untuk operator workspace ybs secara umum
+        // (superadmin cuma boleh lihat+ekspor).
+        allow delete: if isWorkspaceOperator();
       }
 
       // deletionLogs/{logId} = jejak audit tiap kali admin pakai "Hapus Semua
       // Chat". Dibuat terpisah dari customers/{customerId} karena dokumen itu
       // sendiri justru ikut terhapus oleh aksi yang sedang dicatat. Log ini
       // sengaja tidak bisa diubah/dihapus siapa pun (termasuk admin) supaya
-      // riwayatnya tetap bisa dipercaya.
+      // riwayatnya tetap bisa dipercaya. Baca tetap boleh admin role apa pun
+      // (superadmin perlu lihat+ekspor riwayat ini juga), tapi bikin log baru
+      // (efek dari "Hapus Semua Chat") cuma operator.
       match /deletionLogs/{logId} {
         allow read: if isWorkspaceAdmin();
 
-        allow create: if isWorkspaceAdmin() &&
+        allow create: if isWorkspaceOperator() &&
           request.resource.data.deletedBy == request.auth.uid;
 
         allow update: if false;
@@ -257,7 +288,7 @@ service cloud.firestore {
         // sama-sama read-only permanen begitu tersimpan.
         match /messages/{messageId} {
           allow read: if isWorkspaceAdmin();
-          allow create: if isWorkspaceAdmin();
+          allow create: if isWorkspaceOperator();
           allow update: if false;
           allow delete: if false;
         }

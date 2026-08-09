@@ -84,7 +84,10 @@ Klik **Save**, lalu **salin Document ID-nya** (ini `WORKSPACE_ID`, dipakai di la
 
 1. **Authentication > Users** → **Add user** → isi email & password admin perusahaan tsb → **Add user**.
 2. Salin **User UID**-nya.
-3. **Firestore Database > Data** → masuk ke dokumen `workspaces/WORKSPACE_ID` tadi → **Start collection** di dalamnya → Collection ID: `admins` → Document ID: **tempel User UID** (jangan Auto-ID) → tambahkan field bebas, mis. `role` (string) = `admin` → **Save**.
+3. **Firestore Database > Data** → masuk ke dokumen `workspaces/WORKSPACE_ID` tadi → **Start collection** di dalamnya → Collection ID: `admins` → Document ID: **tempel User UID** (jangan Auto-ID) → tambahkan field `role` (string), isi salah satu:
+   - `operator` (atau field `role` dikosongkan/tidak ditambahkan sama sekali) — bisa balas chat, arsip/hapus chat, ubah semua Pengaturan (Appearance/Auto-Chat/Jam Operasional), ekspor chat. Ini akses penuh, cocok buat admin yang beneran menjalankan operasional chat.
+   - `superadmin` — **cuma bisa lihat & ekspor chat** (tidak bisa balas, arsip, hapus, atau ubah Pengaturan tampilan/Auto-Chat/Jam Operasional — tombol-tombolnya gak muncul di dashboard, dan Firestore rules ikut menolak kalau dipaksa lewat cara lain). Cocok buat pemilik bisnis yang mau mengawasi/mengaudit tanpa ikut campur operasional harian. Tetap bisa akses Profil (ganti nama/foto sendiri + Keluar) dan Pengaturan > Riwayat (lihat & ekspor chat yang sudah dihapus).
+   - Role **tidak bisa diubah admin itu sendiri lewat aplikasi** (harus lewat Console juga) — supaya superadmin tidak bisa menurunkan diri sendiri jadi operator buat melewati pembatasan ini.
 
 ### 4c. Hubungkan admin ke workspace-nya (adminIndex)
 

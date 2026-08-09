@@ -553,6 +553,30 @@ async function ensureWorkspaceSlug(workspaceId) {
   }
 }
 
+function isSuperadmin() {
+  return !!currentAdmin && currentAdmin.role === "superadmin";
+}
+
+// Rute Pengaturan yang cuma boleh operator (ubah tampilan widget/Auto-Chat/
+// jam operasional) -- "profile" (buat akses tombol Keluar) dan "history"
+// (arsip percakapan terhapus, cocok sama tugas superadmin "lihat+ekspor")
+// TETAP boleh diakses superadmin, lihat applyRoute() & catatan di bawah.
+const OPERATOR_ONLY_SETTINGS_ROUTES = ["settings/appearance", "settings/autochat", "settings/hours"];
+
+// Sembunyikan hal-hal yang cuma boleh dikerjakan operator dari tampilan
+// superadmin -- Firestore rules (isWorkspaceOperator()) sudah nolak
+// tulisannya di server, ini lapisan UI-nya supaya superadmin gak lihat
+// tombol yang bakal gagal kalau diklik. Dipanggil sekali pas login
+// (bagian yang gak bergantung chat mana yang lagi dibuka); bagian yang
+// bergantung chat aktif (form kirim pesan, tombol arsip/hapus) diatur
+// terpisah di openCustomer()/renderCustomerPanel().
+function applyRolePermissionsUI() {
+  if (!isSuperadmin()) return;
+  OPERATOR_ONLY_SETTINGS_ROUTES.forEach((route) => {
+    document.querySelectorAll('a[href="#/' + route + '"]').forEach((el) => el.classList.add("hidden"));
+  });
+}
+
 async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   ensureAudio();
   currentAdmin = {
@@ -561,10 +585,16 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
     workspaceId,
     workspaceName: null,
     name: adminData.name || email,
-    photo: adminData.photo || null
+    photo: adminData.photo || null,
+    // Default "operator" -- termasuk dokumen admin lama yang belum punya
+    // field role sama sekali (lihat isWorkspaceOperator() di
+    // firestore.rules, dibikin default sama biar konsisten). Cuma
+    // "superadmin" yang eksplisit dikunci ke lihat+ekspor doang.
+    role: adminData.role === "superadmin" ? "superadmin" : "operator"
   };
   adminEmailEl.textContent = currentAdmin.name;
   renderAvatar(sidebarAvatarEl, currentAdmin.photo, currentAdmin.name);
+  applyRolePermissionsUI();
   loginScreen.classList.add("hidden");
   appScreen.classList.remove("hidden");
 
@@ -1240,6 +1270,11 @@ function renderCustomerPanel(data, uid) {
   exportBtn.addEventListener("click", () => exportChatTranscript(uid, data.name, exportBtn));
   customerPanelBody.appendChild(exportBtn);
 
+  // Arsip & hapus cuma buat operator -- superadmin cuma lihat+ekspor
+  // (Firestore rules juga sudah nolak tulisannya, ini cuma biar tombolnya
+  // gak kelihatan sama sekali).
+  if (isSuperadmin()) return;
+
   const archiveBtn = document.createElement("button");
   archiveBtn.type = "button";
   archiveBtn.className = "archive-btn";
@@ -1553,8 +1588,13 @@ function openCustomer(uid, name) {
   updateChatHeaderPresence();
   infoToggleBtn.classList.remove("hidden");
   customerPanel.classList.remove("hidden");
-  messageForm.classList.remove("hidden");
-  messageInput.focus();
+  // Superadmin cuma boleh lihat+ekspor -- form balas disembunyikan total
+  // (rules juga nolak tulisannya kalau dipaksa, ini cuma biar gak
+  // kelihatan tombol yang bakal gagal).
+  if (!isSuperadmin()) {
+    messageForm.classList.remove("hidden");
+    messageInput.focus();
+  }
 
   if (customersDataMap.has(uid)) {
     renderCustomerPanel(customersDataMap.get(uid), uid);
@@ -1866,6 +1906,14 @@ function applyRoute() {
   if (!currentAdmin) return;
 
   const route = window.location.hash.replace(/^#\/?/, "") || "open";
+
+  // Jaga-jaga kalau superadmin nyoba akses langsung lewat URL hash (bukan
+  // cuma nge-klik link yang sudah disembunyikan applyRolePermissionsUI()).
+  if (isSuperadmin() && OPERATOR_ONLY_SETTINGS_ROUTES.includes(route)) {
+    navigateTo("settings/profile");
+    return;
+  }
+
   settingsProfileView.classList.add("hidden");
   settingsAppearanceView.classList.add("hidden");
   settingsAutochatView.classList.add("hidden");
