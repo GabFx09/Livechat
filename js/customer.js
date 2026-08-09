@@ -71,8 +71,8 @@ function extractWorkspaceIdFromPath() {
   return last;
 }
 
-// Bukan const -- bisa dikoreksi di loadInitialData() kalau ternyata ID di
-// URL ini cuma versi huruf-kecil dari ID asli (lihat catatan di sana).
+// Bukan const -- bisa dikoreksi di resolveWorkspaceSnap() kalau ternyata ID
+// di URL ini cuma versi huruf-kecil dari ID asli (lihat catatan di sana).
 let workspaceId =
   new URLSearchParams(window.location.search).get("w") || extractWorkspaceIdFromPath();
 
@@ -838,15 +838,23 @@ nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") startBtn.click();
 });
 
-// Sign-in anonim & ambil data workspace ditembak bersamaan (dok workspace
-// publik, tidak butuh auth) supaya tidak nunggu bergiliran -- baru setelah
-// user.uid didapat, ambil data customer (butuh uid).
-async function loadInitialData() {
-  const signInPromiseInit = ensureSignedIn();
-  const wsSnapPromise = getDoc(doc(db, ...wsPath()));
-  const user = await signInPromiseInit;
-  let wsSnap = await wsSnapPromise;
+// Ambil terus coba lagi kalau gagal (WiFi/data seluler yang putus sesaat) --
+// dipakai terpisah oleh alur branding maupun alur auto-rejoin di bawah,
+// masing-masing retry sendiri-sendiri.
+async function withRetries(fn, maxAttempts = 3) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      console.error(`Percobaan ${attempt}/${maxAttempts} gagal:`, err);
+      if (attempt === maxAttempts) return null;
+      await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+    }
+  }
+}
 
+async function resolveWorkspaceSnap() {
+  let wsSnap = await getDoc(doc(db, ...wsPath()));
   if (!wsSnap.exists()) {
     // ID workspace asli case-sensitive, tapi sebagian CMS/website
     // perusahaan otomatis mengubah URL yang ditempel jadi huruf kecil
@@ -859,67 +867,59 @@ async function loadInitialData() {
       wsSnap = await getDoc(doc(db, ...wsPath()));
     }
   }
-
-  const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
-  return { user, wsSnap, customerSnap };
+  return wsSnap;
 }
 
-// Ambil data workspace/customer & terapkan hasilnya SETELAH layar "Mulai
-// Chat" sudah kelihatan (lihat init()) -- bukan sebelum. Login/koneksi ke
-// Firebase (sign-in anonim + App Check/reCAPTCHA + 2 baca Firestore) bisa
-// makan beberapa detik, padahal form "Mulai Chat" itu sendiri gak butuh
-// data apa pun buat ditampilkan. Jadi jalur ini murni "upgrade" tampilan
-// begitu datanya sampai: ganti branding generik jadi branding asli, dan
-// auto-rejoin kalau ternyata browser ini sudah pernah chat sebelumnya.
-async function loadInitialDataInBackground() {
-  // Coba beberapa kali sebelum menyerah -- WiFi/data seluler yang putus
-  // sesaat pas halaman baru dibuka bikin sign-in/ambil data workspace
-  // gagal diam-diam. Customer tetap bisa pakai form yang sudah kelihatan
-  // (branding generik) walau semua percobaan gagal -- klik "Mulai Chat"
-  // nanti akan coba lagi sendiri (lihat startBtn).
-  const MAX_ATTEMPTS = 3;
-  let loaded = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      loaded = await loadInitialData();
-      break;
-    } catch (err) {
-      console.error(`Gagal memuat workspace (percobaan ${attempt}/${MAX_ATTEMPTS}):`, err);
-      if (attempt === MAX_ATTEMPTS) return;
-      await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
-    }
-  }
+function applyWorkspaceData(wsSnap) {
+  if (!wsSnap || !wsSnap.exists()) return;
+  const wsData = wsSnap.data();
+  if (wsData.brandName) applyBrandName(wsData.brandName);
+  if (wsData.themeColor) applyThemeColor(wsData.themeColor);
+  if (wsData.headerLogoBase64) applyHeaderLogo(wsData.headerLogoBase64);
+  saveCachedBranding(wsData.brandName, wsData.themeColor, wsData.headerLogoBase64);
+  autoGreetingEnabled = !!wsData.autoGreetingEnabled;
+  autoGreetingMessage = wsData.autoGreetingMessage || "";
+  autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
+  autoGreetingOptionReplies =
+    wsData.autoGreetingOptionReplies && typeof wsData.autoGreetingOptionReplies === "object"
+      ? wsData.autoGreetingOptionReplies
+      : {};
+  businessHours = {
+    enabled: !!wsData.businessHoursEnabled,
+    days: Array.isArray(wsData.businessHoursDays) ? wsData.businessHoursDays : [],
+    start: wsData.businessHoursStart || "09:00",
+    end: wsData.businessHoursEnd || "17:00",
+    offlineMessage: wsData.offlineMessage || ""
+  };
+  updateOfflineBanners();
+  // Status online/offline murni soal jam berjalan, bukan nunggu event
+  // Firestore -- dicek ulang tiap menit supaya banner-nya akurat kalau
+  // customer buka halaman ini lama (mis. pas jam kerja lagi mepet).
+  setInterval(updateOfflineBanners, 60000);
+}
 
-  try {
-    const { user, wsSnap, customerSnap } = loaded;
+// Dua alur ini ditembak BERSAMAAN dan SALING GAK NUNGGU, bukan satu
+// sesudah yang lain:
+// - Branding (dokumen workspace) public-read, gak butuh sign-in sama
+//   sekali (lihat firestore.rules) -- jadi bisa langsung tampil begitu
+//   baca Firestore-nya selesai, tanpa ikut nunggu proses sign-in anonim +
+//   App Check yang biasanya lebih lambat.
+// - Auto-rejoin BUTUH uid (hasil sign-in) buat tahu dokumen customer mana
+//   yang harus dicek, jadi tetap nunggu sign-in duluan -- tapi ini gak lagi
+//   menahan branding supaya nongol bareng.
+// Keduanya dipanggil dari init() SETELAH layar "Mulai Chat" sudah
+// kelihatan (lihat init()) -- form itu sendiri gak butuh data apa pun buat
+// ditampilkan duluan.
+function loadInitialDataInBackground() {
+  withRetries(async () => {
+    const wsSnap = await resolveWorkspaceSnap();
+    applyWorkspaceData(wsSnap);
+  });
+
+  withRetries(async () => {
+    const user = await ensureSignedIn();
+    const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     initialCustomerSnap = customerSnap;
-    if (wsSnap.exists()) {
-      const wsData = wsSnap.data();
-      if (wsData.brandName) applyBrandName(wsData.brandName);
-      if (wsData.themeColor) applyThemeColor(wsData.themeColor);
-      if (wsData.headerLogoBase64) applyHeaderLogo(wsData.headerLogoBase64);
-      saveCachedBranding(wsData.brandName, wsData.themeColor, wsData.headerLogoBase64);
-      autoGreetingEnabled = !!wsData.autoGreetingEnabled;
-      autoGreetingMessage = wsData.autoGreetingMessage || "";
-      autoGreetingOptions = Array.isArray(wsData.autoGreetingOptions) ? wsData.autoGreetingOptions : [];
-      autoGreetingOptionReplies =
-        wsData.autoGreetingOptionReplies && typeof wsData.autoGreetingOptionReplies === "object"
-          ? wsData.autoGreetingOptionReplies
-          : {};
-      businessHours = {
-        enabled: !!wsData.businessHoursEnabled,
-        days: Array.isArray(wsData.businessHoursDays) ? wsData.businessHoursDays : [],
-        start: wsData.businessHoursStart || "09:00",
-        end: wsData.businessHoursEnd || "17:00",
-        offlineMessage: wsData.offlineMessage || ""
-      };
-      updateOfflineBanners();
-      // Status online/offline murni soal jam berjalan, bukan nunggu event
-      // Firestore -- dicek ulang tiap menit supaya banner-nya akurat kalau
-      // customer buka halaman ini lama (mis. pas jam kerja lagi mepet).
-      setInterval(updateOfflineBanners, 60000);
-    }
-
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya -- TAPI
     // cuma kalau customer belum keburu mulai sesi baru sendiri lewat form
     // yang sudah kelihatan duluan (lihat sessionActive di enterChat()).
@@ -930,9 +930,7 @@ async function loadInitialDataInBackground() {
       enterChat(user.uid, customerSnap.data().name);
       captureVisitorInfo(user.uid);
     }
-  } catch (err) {
-    console.error("Gagal memuat workspace:", err);
-  }
+  });
 }
 
 function init() {
