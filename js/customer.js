@@ -468,6 +468,9 @@ function enterChat(uid, name) {
   listenMessages();
   listenSessionAlive(uid);
   startPresenceHeartbeat();
+
+  if (lastSeenIntervalId) clearInterval(lastSeenIntervalId);
+  lastSeenIntervalId = setInterval(refreshLastSeen, LAST_SEEN_REFRESH_MS);
 }
 
 // Kalau admin menghapus dokumen customers/{uid} ini (tombol "Hapus Semua
@@ -494,9 +497,11 @@ function handleSessionDeleted() {
   if (unsubMessages) unsubMessages();
   if (unsubCustomerDoc) unsubCustomerDoc();
   if (presenceIntervalId) clearInterval(presenceIntervalId);
+  if (lastSeenIntervalId) clearInterval(lastSeenIntervalId);
   unsubMessages = null;
   unsubCustomerDoc = null;
   presenceIntervalId = null;
+  lastSeenIntervalId = null;
 
   messageInput.disabled = true;
   imageInput.disabled = true;
@@ -835,6 +840,60 @@ async function sendTextMessage(text) {
 const OPTION_SELECT_LIMIT = 2;
 let optionSelectCount = 0;
 
+// Kalau customer sempat TIDAK aktif minimal 2 jam sebelum balik lagi (tutup
+// tab/reload lama kemudian), dianggap "sesi baru" khusus buat menu bantuan
+// ini: optionSelectCount di-reset ke 0 dan pesan menu pilihan dikirim ulang
+// (lihat sendAutoGreetingOptions) -- TIDAK menghapus riwayat chat, nama,
+// atau apa pun lain, cuma limit menu bantuannya saja. lastSeenAt yang belum
+// pernah ada sama sekali (customer lama dari sebelum fitur ini di-deploy)
+// sengaja TIDAK dianggap sebagai gap -- baru mulai dilacak dari kunjungan
+// ini, biar tidak tiba-tiba nge-blast ulang menu ke semua customer existing
+// begitu fitur ini baru rilis.
+const SESSION_GAP_MS = 2 * 60 * 60 * 1000; // 2 jam
+let lastSeenIntervalId = null;
+
+function sessionShouldReset(data) {
+  if (!data || !data.lastSeenAt) return false;
+  return Date.now() - data.lastSeenAt.toMillis() >= SESSION_GAP_MS;
+}
+
+// Kirim ulang pesan "menu pilihan" (sama persis bentuknya dengan yang
+// dikirim auto-rejoin/mulai chat pertama kali) -- dipanggil baik dari
+// isNewCustomer (sapaan pertama) maupun dari reset gap 2 jam di atas.
+function sendAutoGreetingOptions(uid) {
+  if (!autoGreetingEnabled || autoGreetingOptions.length === 0) return;
+  // Jeda singkat (kesan "bot lagi ngetik"), sama seperti sapaan pertama --
+  // supaya tidak numpuk pesan dalam 1 detik yang sama.
+  setTimeout(() => {
+    writeMessage(uid, {
+      sender: "admin",
+      type: "options",
+      options: autoGreetingOptions,
+      timestamp: serverTimestamp(),
+      autoGreeting: true
+    }).catch(() => {});
+  }, 900);
+}
+
+// lastSeenAt cuma ditulis ulang pas sesi mulai/rejoin DAN berkala tiap
+// LAST_SEEN_REFRESH_MS selama tab tetap aktif -- kalau cuma ditulis pas
+// mulai sesi, customer yang buka tab terus-menerus selama berjam-jam lalu
+// nutup sebentar akan salah kena reset (gap dihitung dari waktu MULAI sesi,
+// bukan waktu TERAKHIR beneran aktif). 10 menit dipilih karena longgar buat
+// ambang 2 jam di atas (meleset maksimal ~10 menit dari batas sebenarnya
+// masih wajar), sambil tetap jauh lebih murah dari heartbeat Firestore lama
+// yang tiap 10-30 detik (lihat catatan PRESENCE_HEARTBEAT_MS).
+const LAST_SEEN_REFRESH_MS = 10 * 60 * 1000;
+
+function refreshLastSeen() {
+  if (!currentUser || !sessionActive) return;
+  setDoc(
+    doc(db, ...wsPath("customers", currentUser.uid)),
+    { lastSeenAt: serverTimestamp() },
+    { merge: true }
+  ).catch(() => {});
+}
+
 // Diklik dari tombol pilihan bantuan (lihat renderMessage type "options").
 // Kirim pilihannya sebagai pesan customer biasa dulu, lalu kalau admin sudah
 // nyetel balasan otomatis buat pilihan itu (Pengaturan > Auto-Chat), susulkan
@@ -955,14 +1014,18 @@ startBtn.addEventListener("click", async () => {
     // fallback getDoc cuma buat jaga-jaga kalau entah kenapa belum keisi.
     const existingSnap = initialCustomerSnap || (await getDoc(doc(db, ...wsPath("customers", user.uid))));
     const isNewCustomer = !existingSnap.exists();
-    optionSelectCount = isNewCustomer ? 0 : existingSnap.data().optionSelectCount || 0;
+    const existingData = isNewCustomer ? null : existingSnap.data();
+    const sessionReset = !isNewCustomer && sessionShouldReset(existingData);
+    optionSelectCount = isNewCustomer || sessionReset ? 0 : existingData.optionSelectCount || 0;
 
     const initialUpdate = {
       name,
       lastMessage: "",
       lastMessageAt: serverTimestamp(),
-      lastSender: null
+      lastSender: null,
+      lastSeenAt: serverTimestamp()
     };
+    if (sessionReset) initialUpdate.optionSelectCount = 0;
     // Dulu field ini cuma keisi pas pertama kali diarsipkan -- jadi
     // dokumen customer lama/baru-mulai-chat sempat gak punya field
     // `archived` sama sekali. Set eksplisit di sini (bukan cuma di
@@ -991,20 +1054,9 @@ startBtn.addEventListener("click", async () => {
         }).catch(() => {});
       }
 
-      // Menyusul sapaan dengan jeda singkat (kesan "bot lagi ngetik"),
-      // supaya tidak numpuk 2 pesan dalam 1 detik yang sama.
-      if (autoGreetingOptions.length > 0) {
-        setTimeout(() => {
-          writeMessage(user.uid, {
-            sender: "admin",
-            type: "options",
-            options: autoGreetingOptions,
-            timestamp: serverTimestamp(),
-            autoGreeting: true
-          }).catch(() => {});
-        }, 900);
-      }
+      sendAutoGreetingOptions(user.uid);
     }
+    if (sessionReset) sendAutoGreetingOptions(user.uid);
   } catch (err) {
     showStartError("Gagal memulai chat: " + err.message);
     startBtn.disabled = false;
@@ -1148,9 +1200,17 @@ function loadInitialDataInBackground(onBrandingSettled) {
     // Kalau sudah, jangan diapa-apain lagi di sini -- sesi yang lagi
     // jalan itu yang menang, bukan hasil auto-rejoin yang telat datang.
     if (!sessionActive && customerSnap.exists() && customerSnap.data().name) {
-      optionSelectCount = customerSnap.data().optionSelectCount || 0;
-      enterChat(user.uid, customerSnap.data().name);
+      const data = customerSnap.data();
+      const sessionReset = sessionShouldReset(data);
+      optionSelectCount = sessionReset ? 0 : data.optionSelectCount || 0;
+      enterChat(user.uid, data.name);
       captureVisitorInfo(user.uid);
+
+      const seenUpdate = { lastSeenAt: serverTimestamp() };
+      if (sessionReset) seenUpdate.optionSelectCount = 0;
+      setDoc(doc(db, ...wsPath("customers", user.uid)), seenUpdate, { merge: true }).catch(() => {});
+
+      if (sessionReset) sendAutoGreetingOptions(user.uid);
     }
   });
 }
