@@ -264,6 +264,7 @@ const passwordInput = document.getElementById("password-input");
 const loginBtn = document.getElementById("login-btn");
 const loginError = document.getElementById("login-error");
 const adminEmailEl = document.getElementById("admin-email");
+const adminRoleLabelEl = document.getElementById("admin-role-label");
 const sidebarAvatarEl = document.getElementById("sidebar-avatar");
 const customerListEl = document.getElementById("customer-list");
 const messagesEl = document.getElementById("messages");
@@ -603,6 +604,15 @@ function isSuperadmin() {
   return !!currentAdmin && currentAdmin.role === "superadmin";
 }
 
+// Nama + foto + label peran di kartu profil sidebar -- 1 fungsi dipanggil
+// dari 2 tempat (masuk pertama kali & simpan pengaturan profil) supaya
+// ketiganya selalu konsisten, gak ada yang kelewat di-update.
+function updateSidebarIdentity() {
+  adminEmailEl.textContent = currentAdmin.name;
+  adminRoleLabelEl.textContent = isSuperadmin() ? "Superadmin" : "Admin";
+  renderAvatar(sidebarAvatarEl, currentAdmin.photo, currentAdmin.name);
+}
+
 // Rute Pengaturan yang cuma boleh operator (ubah tampilan widget/Auto-Chat/
 // jam operasional) -- "profile" (buat akses tombol Keluar) dan "history"
 // (arsip percakapan terhapus, cocok sama tugas superadmin "lihat+ekspor")
@@ -647,8 +657,7 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
     // "superadmin" yang eksplisit dikunci ke lihat+ekspor doang.
     role: adminData.role === "superadmin" ? "superadmin" : "operator"
   };
-  adminEmailEl.textContent = currentAdmin.name;
-  renderAvatar(sidebarAvatarEl, currentAdmin.photo, currentAdmin.name);
+  updateSidebarIdentity();
   applyRolePermissionsUI();
   loginScreen.classList.add("hidden");
   appScreen.classList.remove("hidden");
@@ -2869,8 +2878,7 @@ settingsSaveBtn.addEventListener("click", async () => {
 
     currentAdmin.name = update.name;
     if (pendingPhotoDataUrl) currentAdmin.photo = pendingPhotoDataUrl;
-    adminEmailEl.textContent = currentAdmin.name;
-    renderAvatar(sidebarAvatarEl, currentAdmin.photo, currentAdmin.name);
+    updateSidebarIdentity();
     navigateTo("open");
   } catch (err) {
     settingsError.textContent = "Gagal menyimpan: " + err.message;
