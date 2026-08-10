@@ -105,6 +105,13 @@ button, a, input, textarea {
   font-size: 0.9rem;
 }
 
+.messages-loading-older {
+  align-self: center;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  padding: 4px 0;
+}
+
 #login-screen {
   display: flex;
   align-items: center;
