@@ -88,7 +88,31 @@ let messagesLiveEl = null; // wrapper (display:contents) buat MESSAGES_PAGE_SIZE
 let messagesLoadingOlderEl = null; // indikator kecil "Memuat pesan lama..." di atas messagesOlderEl
 let lastKnownTimestamps = new Map();
 let customersInitialLoadDone = false;
+// customersDataMap = lookup uid->data buat SEMUA customer yang lagi dimuat
+// (live + hasil "muat lebih banyak") -- urutan tampil TIDAK diambil dari
+// urutan Map ini (Map.set() ke key yang sudah ada tidak mindahin posisinya,
+// padahal urutan lastMessageAt desc bisa berubah tiap ada pesan baru), jadi
+// urutan dikelola terpisah lewat liveCustomerOrder + olderCustomerUids di
+// bawah -- lihat getCustomerOrder(), dipakai renderCustomerList() dan
+// getVisibleCustomerEntries().
 let customersDataMap = new Map();
+// Sama seperti pesan (lihat MESSAGES_PAGE_SIZE) -- dulu listenCustomers()
+// live-listen ke 300 customer sekaligus. Sekarang cuma CUSTOMERS_PAGE_SIZE
+// (100) paling baru yang live; sisanya dimuat sesuai kebutuhan (scroll ke
+// bawah di sidebar) lewat loadOlderCustomers(), TIDAK live (data customer
+// lama jarang berubah -- kalau berubah dia otomatis "naik" masuk balik ke
+// live window lewat listenCustomers() lain kali).
+const CUSTOMERS_PAGE_SIZE = 100;
+let liveCustomerUids = new Set(); // uid yg lagi di live window (snapshot listenCustomers() saat ini)
+let liveCustomerOrder = []; // urutan live window, dari snapshot terbaru
+let olderCustomerUids = []; // uid hasil loadOlderCustomers(), urutan append (selalu setelah live)
+let oldestLoadedCustomerCursor = null; // cursor (lastMessageAt) buat loadOlderCustomers()
+let allOlderCustomersLoaded = false;
+let loadingOlderCustomers = false;
+let customerListLoadingOlderEl = null; // indikator kecil "Memuat customer lama..." di bawah daftar
+function getCustomerOrder() {
+  return liveCustomerOrder.concat(olderCustomerUids);
+}
 let currentListView = "active"; // "active" (Open) | "all" | "archived"
 let searchQuery = "";
 let autoArchiveIntervalId = null;
@@ -988,10 +1012,17 @@ function oneYearFromNow() {
 // Percakapan yang sudah 30 menit tanpa pesan baru (dari admin maupun
 // customer) otomatis dipindah ke Arsip. Dicek tiap ada snapshot baru + tiap
 // 60 detik (lewat setInterval), karena waktu berjalan tidak memicu snapshot.
+// Cuma nyisir liveCustomerOrder (bukan seluruh customersDataMap): customer
+// hasil loadOlderCustomers() datanya statis/gak live-sync, jadi field
+// `archived` di cache lokalnya bisa basi -- kalau ikut disisir di sini,
+// setDoc arsip yang sama bisa nembak berkali-kali tanpa henti tiap tick
+// (60 detik) karena hasilnya gak akan pernah kelihatan "sudah diarsipkan"
+// di cache lokal itu.
 function checkAutoArchive() {
   const now = Date.now();
-  customersDataMap.forEach((data, uid) => {
-    if (data.archived) return;
+  liveCustomerOrder.forEach((uid) => {
+    const data = customersDataMap.get(uid);
+    if (!data || data.archived) return;
     if (!data.lastMessageAt) return;
     if (now - data.lastMessageAt.toMillis() >= AUTO_ARCHIVE_MS) {
       setDoc(
@@ -1038,36 +1069,36 @@ async function toggleArchive(uid, archived) {
   }
 }
 
-// limit(300): tanpa batas ini, tiap kali listener ini dipasang (login/buka
-// dashboard) biayanya = 1 baca Firestore x SELURUH histori customer yang
-// pernah ada (termasuk yang sudah diarsipkan sampai 1 tahun) -- makin lama
-// dipakai makin berat. Diurutkan lastMessageAt desc, jadi 300 slot ini
-// otomatis "self-sorting": percakapan yang beneran masih aktif selalu naik
-// ke atas tiap ada pesan baru, hampir mustahil ke-geser keluar; yang
-// ke-geser cuma yang memang sudah lama tidak disentuh. Kalau nanti histori
-// arsipnya jauh lebih besar dari itu, chat paling lama tidak akan lagi
-// kelihatan di tab Arsip/pencarian -- itu trade-off yang disengaja, bukan
-// bug (lihat memory 2026-08-09).
+// limit(CUSTOMERS_PAGE_SIZE): tanpa batas ini, tiap kali listener ini
+// dipasang (login/buka dashboard) biayanya = 1 baca Firestore x SELURUH
+// histori customer yang pernah ada (termasuk yang sudah diarsipkan sampai
+// 1 tahun) -- makin lama dipakai makin berat. Diurutkan lastMessageAt
+// desc, jadi 100 slot ini otomatis "self-sorting": percakapan yang
+// beneran masih aktif selalu naik ke atas tiap ada pesan baru, hampir
+// mustahil ke-geser keluar; yang ke-geser cuma yang memang sudah lama
+// tidak disentuh -- dan itu tetap bisa dilihat kok, lewat
+// loadOlderCustomers() (scroll ke bawah di sidebar), cuma gak live lagi.
 //
 // Sengaja TIDAK difilter where("archived","==",false): dokumen customer
 // yang dibuat sebelum field itu ada di initialUpdate (lihat customer.js)
 // tidak punya field ini sama sekali, dan Firestore equality filter diam-
 // diam MENGECUALIKAN dokumen yang field-nya tidak ada -- kalau dipasang
 // tanpa backfill data lama dulu, chat aktif lama bisa hilang total dari
-// dashboard. limit(300) + urutan recency di atas sudah cukup buat
-// membatasi biaya tanpa risiko itu.
+// dashboard. limit() + urutan recency di atas sudah cukup buat membatasi
+// biaya tanpa risiko itu.
 function listenCustomers() {
-  const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"), limit(300));
+  const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"), limit(CUSTOMERS_PAGE_SIZE));
   onSnapshot(q, (snap) => {
     let shouldPlaySound = false;
     const newMessageNames = [];
-    customersDataMap.clear();
+    const newLiveOrder = [];
 
     snap.forEach((docSnap) => {
       const uid = docSnap.id;
       const data = docSnap.data();
       if (!data.name) return;
       customersDataMap.set(uid, data);
+      newLiveOrder.push(uid);
 
       const waiting = data.lastSender === "customer";
       const newMillis = data.lastMessageAt ? data.lastMessageAt.toMillis() : 0;
@@ -1079,6 +1110,27 @@ function listenCustomers() {
       }
       lastKnownTimestamps.set(uid, newMillis);
     });
+
+    // Buang dari customersDataMap uid yang dulu di live window tapi
+    // sekarang sudah kegeser keluar (atau kehapus) -- KECUALI kalau dia
+    // juga ada di olderCustomerUids (hasil loadOlderCustomers(), tetap
+    // valid dipertahankan walau sudah bukan bagian live window).
+    const newLiveSet = new Set(newLiveOrder);
+    const olderSet = new Set(olderCustomerUids);
+    liveCustomerUids.forEach((uid) => {
+      if (!newLiveSet.has(uid) && !olderSet.has(uid)) customersDataMap.delete(uid);
+    });
+    liveCustomerUids = newLiveSet;
+    liveCustomerOrder = newLiveOrder;
+
+    // Cursor buat loadOlderCustomers() cuma diatur dari sini SELAMA belum
+    // ada halaman older yang dimuat -- listener ini bisa nembak sering
+    // banget (tiap ada 1 pesan baru di mana pun), jangan sampai nge-reset
+    // progres pagination yang sedang berjalan.
+    if (olderCustomerUids.length === 0) {
+      oldestLoadedCustomerCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1].data().lastMessageAt : null;
+      allOlderCustomersLoaded = snap.docs.length < CUSTOMERS_PAGE_SIZE;
+    }
 
     if (shouldPlaySound) {
       playNotificationSound();
@@ -1098,6 +1150,50 @@ function listenCustomers() {
   });
 }
 
+// Dipicu scroll ke BAWAH di sidebar (urutan daftar ini terbaru-di-atas,
+// jadi customer yang lebih lama ada di bawah -- kebalikan dari pesan chat
+// yang lebih lama ada di ATAS). Sekali baca (bukan live listener, lihat
+// catatan CUSTOMERS_PAGE_SIZE di atas), ditambahkan ke akhir daftar.
+async function loadOlderCustomers() {
+  if (loadingOlderCustomers || allOlderCustomersLoaded || !oldestLoadedCustomerCursor) return;
+  loadingOlderCustomers = true;
+  if (customerListLoadingOlderEl) customerListLoadingOlderEl.classList.remove("hidden");
+  try {
+    const q = query(
+      collection(db, ...wsPath("customers")),
+      orderBy("lastMessageAt", "desc"),
+      startAfter(oldestLoadedCustomerCursor),
+      limit(CUSTOMERS_PAGE_SIZE)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      allOlderCustomersLoaded = true;
+      return;
+    }
+    snap.forEach((docSnap) => {
+      const uid = docSnap.id;
+      const data = docSnap.data();
+      if (!data.name) return;
+      customersDataMap.set(uid, data);
+      olderCustomerUids.push(uid);
+    });
+    oldestLoadedCustomerCursor = snap.docs[snap.docs.length - 1].data().lastMessageAt;
+    if (snap.docs.length < CUSTOMERS_PAGE_SIZE) allOlderCustomersLoaded = true;
+    renderCustomerList();
+  } catch (err) {
+    console.error("Gagal memuat customer lama:", err);
+  } finally {
+    loadingOlderCustomers = false;
+    if (customerListLoadingOlderEl) customerListLoadingOlderEl.classList.add("hidden");
+  }
+}
+
+customerListEl.addEventListener("scroll", () => {
+  if (customerListEl.scrollTop + customerListEl.clientHeight > customerListEl.scrollHeight - 80) {
+    loadOlderCustomers();
+  }
+});
+
 function matchesSearch(data) {
   if (!searchQuery) return true;
   const q = searchQuery.toLowerCase();
@@ -1110,7 +1206,9 @@ function matchesSearch(data) {
 
 function getVisibleCustomerEntries() {
   const entries = [];
-  customersDataMap.forEach((data, uid) => {
+  getCustomerOrder().forEach((uid) => {
+    const data = customersDataMap.get(uid);
+    if (!data) return;
     // Lagi nyari? Abaikan filter tab Aktif/Arsip -- customer maunya nemu
     // chat-nya, bukan dibatasi tab mana yang lagi kebuka (chat yang dicari
     // bisa saja sudah keburu ke-auto-archive).
@@ -1213,9 +1311,22 @@ function updateRailBadge() {
 }
 
 function renderCustomerList() {
+  // customerListEl.scrollTop kepaksa balik ke 0 begitu innerHTML dikosongkan
+  // (gak ada lagi yang bisa di-scroll sesaat) dan TIDAK otomatis balik ke
+  // posisi semula walau kekisi ulang -- jadi harus disimpan & dipulihkan
+  // manual di sini. Fungsi ini bisa nembak sering banget (tiap ada 1 pesan
+  // baru di mana pun di live window), jangan sampai admin yang lagi scroll
+  // ke bawah baca customer lama diseret balik ke atas tiap kali itu terjadi.
+  // Beda dari pesan chat (yang pesan lamanya di-PREPEND ke atas, butuh
+  // kompensasi delta tinggi) -- customer lama selalu ditambah di BAWAH lewat
+  // loadOlderCustomers(), jadi cukup pulihkan scrollTop apa adanya, gak
+  // perlu hitung delta scrollHeight.
+  const prevScrollTop = customerListEl.scrollTop;
   customerListEl.innerHTML = "";
 
-  customersDataMap.forEach((data, uid) => {
+  getCustomerOrder().forEach((uid) => {
+    const data = customersDataMap.get(uid);
+    if (!data) return;
     const isArchived = !!data.archived;
     if (!searchQuery) {
       if (currentListView === "archived" && !isArchived) return;
@@ -1284,6 +1395,13 @@ function renderCustomerList() {
     li.addEventListener("click", () => openCustomer(uid, data.name));
     customerListEl.appendChild(li);
   });
+
+  customerListLoadingOlderEl = document.createElement("li");
+  customerListLoadingOlderEl.className = "customer-list-loading-older hidden";
+  customerListLoadingOlderEl.textContent = "Memuat customer lama...";
+  customerListEl.appendChild(customerListLoadingOlderEl);
+
+  customerListEl.scrollTop = prevScrollTop;
 }
 
 // Presence (online/offline) berubah jauh lebih sering & tidak pernah
@@ -2031,6 +2149,12 @@ settingsLogoutBtn.addEventListener("click", async () => {
   activeCustomerName = "";
   lastKnownTimestamps.clear();
   customersDataMap.clear();
+  liveCustomerUids.clear();
+  liveCustomerOrder = [];
+  olderCustomerUids = [];
+  oldestLoadedCustomerCursor = null;
+  allOlderCustomersLoaded = false;
+  loadingOlderCustomers = false;
   customersInitialLoadDone = false;
   currentListView = "active";
   searchQuery = "";
