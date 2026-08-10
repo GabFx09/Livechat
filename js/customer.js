@@ -149,8 +149,19 @@ function todayKeyWIB() {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+// stats/{tanggal} dulu 1 dokumen per hari ditulis oleh SEMUA customer+admin
+// tiap kali ada pesan -- jadi titik rebutan tulis kalau banyak orang kirim
+// pesan bersamaan (Firestore mulai kena contention di atas ~1 tulis/detik
+// per dokumen). Sekarang dipecah ke STATS_SHARD_COUNT dokumen per hari
+// (ID "{tanggal}_{0..9}"), tiap bumpStat pilih 1 pecahan acak -- openStats()
+// di admin.js yang menjumlahkan semua pecahan itu pas ditampilkan.
+const STATS_SHARD_COUNT = 10;
+function statsShardKey() {
+  return `${todayKeyWIB()}_${Math.floor(Math.random() * STATS_SHARD_COUNT)}`;
+}
+
 function bumpStat(field) {
-  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(1) }, { merge: true }).catch(() => {});
+  setDoc(doc(db, ...wsPath("stats", statsShardKey())), { [field]: increment(1) }, { merge: true }).catch(() => {});
 }
 
 // Satu-satunya titik yang boleh memicu signInAnonymously, supaya init() (yang

@@ -186,12 +186,21 @@ function dateKeyDaysAgoWIB(daysAgo) {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+// Lihat catatan yang sama di customer.js -- stats/{tanggal} dipecah ke
+// beberapa dokumen ("{tanggal}_{0..9}") biar tidak jadi titik rebutan
+// tulis tunggal kalau banyak pesan masuk bersamaan. openStats() di bawah
+// yang menjumlahkan semua pecahan per tanggal pas ditampilkan.
+const STATS_SHARD_COUNT = 10;
+function statsShardKey() {
+  return `${todayKeyWIB()}_${Math.floor(Math.random() * STATS_SHARD_COUNT)}`;
+}
+
 function bumpStat(field) {
-  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(1) }, { merge: true }).catch(() => {});
+  setDoc(doc(db, ...wsPath("stats", statsShardKey())), { [field]: increment(1) }, { merge: true }).catch(() => {});
 }
 
 function bumpStatBy(field, amount) {
-  setDoc(doc(db, ...wsPath("stats", todayKeyWIB())), { [field]: increment(amount) }, { merge: true }).catch(() => {});
+  setDoc(doc(db, ...wsPath("stats", statsShardKey())), { [field]: increment(amount) }, { merge: true }).catch(() => {});
 }
 
 // Dipanggil tiap admin kirim balasan. Kalau ini balasan PERTAMA buat
@@ -747,7 +756,11 @@ async function openStats() {
 
   const DAYS = 30;
   const startKey = dateKeyDaysAgoWIB(DAYS - 1);
-  const todayKey = todayKeyWIB();
+  // Batas atas dibuat EKSKLUSIF besok (bukan "<= todayKeyWIB()") supaya
+  // dokumen pecahan hari ini yang ID-nya "{tanggal}_{0..9}" ikut tercakup --
+  // string itu leksikografis lebih besar dari tanggal polosnya (prefix sama,
+  // lebih panjang).
+  const endExclusiveKey = dateKeyDaysAgoWIB(-1);
 
   // Kunci tanggal format YYYY-MM-DD urut leksikografis sama dengan urut
   // kronologis, jadi range query pakai documentId() bisa dipakai langsung
@@ -757,10 +770,20 @@ async function openStats() {
     const q = query(
       collection(db, ...wsPath("stats")),
       where(documentId(), ">=", startKey),
-      where(documentId(), "<=", todayKey)
+      where(documentId(), "<", endExclusiveKey)
     );
     const snap = await getDocs(q);
-    snap.forEach((docSnap) => byDate.set(docSnap.id, docSnap.data()));
+    snap.forEach((docSnap) => {
+      // 10 karakter pertama = tanggal ("YYYY-MM-DD"); dokumen lama
+      // (sebelum sharding) ID-nya persis ini juga, dokumen baru punya
+      // suffix "_0".."_9" yang dibuang di sini supaya kegabung ke tanggal
+      // yang sama.
+      const dateKey = docSnap.id.slice(0, 10);
+      const data = docSnap.data();
+      const merged = byDate.get(dateKey) || {};
+      for (const field in data) merged[field] = (merged[field] || 0) + (data[field] || 0);
+      byDate.set(dateKey, merged);
+    });
   } catch (err) {
     console.error("Gagal memuat statistik:", err);
   }
