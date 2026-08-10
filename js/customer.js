@@ -29,6 +29,7 @@ import {
   getDatabase,
   ref as rtdbRef,
   set as rtdbSet,
+  remove as rtdbRemove,
   onDisconnect,
   serverTimestamp as rtdbServerTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
@@ -519,12 +520,19 @@ function rtdbPresenceRef(uid) {
   return rtdbRef(rtdb, `presence/${workspaceId}/${uid}`);
 }
 
-// Bikin sekali di sini, dipakai baik oleh payload online maupun offline
-// (langsung & lewat onDisconnect) -- supaya ubah bentuk datanya nanti cukup
-// di satu tempat, gak keselip di salah satu dari 3 titik yang sebelumnya
-// masing-masing punya literal sendiri.
-function presencePayload(online) {
-  return { online, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() };
+// Cuma dipakai buat payload ONLINE sekarang -- offline direpresentasikan
+// dengan MENGHAPUS entrinya (lihat goOnlineRtdb/goOfflineRtdb di bawah),
+// bukan nulis {online:false}. Sebelumnya tiap customer yang PERNAH mampir
+// nyisain 1 entri permanen di presence/{workspaceId} (gak pernah dihapus,
+// cuma ditandain false) -- makin lama makin numpuk (skala ~1500
+// customer/hari, lihat memory 2026-08-09), dan listenPresence() admin.js
+// nge-download ULANG SELURUH node itu tiap ada 1 perubahan APAPUN di
+// dalamnya, jadi ini beban yang terus membesar seiring waktu, bukan cuma
+// pas rame. isCustomerOnline() di admin.js sudah cukup treat "entri gak
+// ada" sama dengan "offline" (presenceMap.get(uid) balik undefined), jadi
+// aman dihapus total.
+function presencePayload() {
+  return { online: true, name: currentUser.name, lastActiveAt: rtdbServerTimestamp() };
 }
 
 function goOnlineRtdb() {
@@ -533,13 +541,13 @@ function goOnlineRtdb() {
   // Didaftarkan ulang tiap kali balik online -- RTDB otomatis membatalkan
   // onDisconnect lama begitu koneksi socket-nya putus, jadi ini aman
   // dipanggil berulang tanpa numpuk.
-  onDisconnect(presRef).set(presencePayload(false));
-  rtdbSet(presRef, presencePayload(true)).catch(() => {});
+  onDisconnect(presRef).remove();
+  rtdbSet(presRef, presencePayload()).catch(() => {});
 }
 
 function goOfflineRtdb() {
   if (!rtdb || !currentUser) return;
-  rtdbSet(rtdbPresenceRef(currentUser.uid), presencePayload(false)).catch(() => {});
+  rtdbRemove(rtdbPresenceRef(currentUser.uid)).catch(() => {});
 }
 
 function sendHeartbeat() {
