@@ -9,9 +9,12 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   collection,
   query,
   orderBy,
+  limit,
+  startAfter,
   onSnapshot,
   addDoc,
   serverTimestamp,
@@ -93,6 +96,20 @@ let sessionActive = false; // false = belum chat, atau sesi dihapus admin & belu
 let unsubMessages = null;
 let unsubCustomerDoc = null;
 let presenceIntervalId = null;
+// Sama seperti sisi admin (lihat MESSAGES_PAGE_SIZE di admin.js) -- customer
+// langganan lama bisa punya ribuan pesan, load & render SEMUANYA tiap buka/
+// refresh chat makin lama makin berat. Cuma MESSAGES_PAGE_SIZE pesan terbaru
+// yang live; lebih lama dimuat sesuai kebutuhan (scroll ke atas) lewat
+// loadOlderMessages(), lihat listenMessages().
+const MESSAGES_PAGE_SIZE = 100;
+let oldestLoadedMessageTimestamp = null; // cursor buat loadOlderMessages()
+let oldestRenderedDateLabel = null; // date-divider paling atas yg lagi tampil, buat cegah dobel di sambungan
+let olderBoundaryDateLabel = null; // tanggal pesan TERBARU dari batch older pertama yg dimuat (batas sama live window)
+let allOlderMessagesLoaded = false;
+let loadingOlderMessages = false;
+let messagesOlderEl = null; // wrapper (display:contents) buat pesan lama hasil loadOlderMessages()
+let messagesLiveEl = null; // wrapper (display:contents) buat MESSAGES_PAGE_SIZE pesan terbaru (live listener)
+let messagesLoadingOlderEl = null; // indikator kecil "Memuat pesan lama..." di atas messagesOlderEl
 
 const authBrandIconEl = document.getElementById("auth-brand-icon");
 const loadingScreen = document.getElementById("loading-screen");
@@ -325,6 +342,32 @@ function createDateDivider(label) {
   return div;
 }
 
+// Bangun sekumpulan pesan (ascending) jadi 1 fragment, sisipkan date-divider
+// tiap kali tanggalnya berubah. precedingDateLabel = tanggal pesan yang
+// SUDAH tampil tepat sebelum batch ini (kalau ada) -- dipakai supaya
+// divider pertama batch ini tidak dobel kalau tanggalnya sama dengan yang
+// di sambungan (lihat pemakaiannya di listenMessages()/loadOlderMessages()).
+// Sama persis dengan admin.js -- lihat catatan panjang di sana soal kenapa
+// paginasi ini ada, disalin (bukan di-share modul) karena customer.js dan
+// admin.js punya renderMessage() dengan signature beda (customer.js gak
+// perlu messageId, gak ada tombol edit/hapus di sisi customer).
+function buildMessagesFragment(docs, precedingDateLabel) {
+  const fragment = document.createDocumentFragment();
+  let lastDate = precedingDateLabel || null;
+  let firstDateLabel = null;
+  docs.forEach((docSnap) => {
+    const m = docSnap.data();
+    const dateLabel = formatDateWIB(m.timestamp);
+    if (firstDateLabel === null) firstDateLabel = dateLabel;
+    if (dateLabel && dateLabel !== lastDate) {
+      fragment.appendChild(createDateDivider(dateLabel));
+      lastDate = dateLabel;
+    }
+    fragment.appendChild(renderMessage(m));
+  });
+  return { fragment, firstDateLabel, lastDateLabel: lastDate };
+}
+
 function renderMessage(m) {
   const div = document.createElement("div");
   div.className = "message " + (m.sender === "customer" ? "mine" : "theirs");
@@ -550,33 +593,129 @@ function startPresenceHeartbeat() {
 
 function listenMessages() {
   if (unsubMessages) unsubMessages();
+
+  messagesEl.innerHTML = "";
+  oldestLoadedMessageTimestamp = null;
+  oldestRenderedDateLabel = null;
+  olderBoundaryDateLabel = null;
+  allOlderMessagesLoaded = false;
+  loadingOlderMessages = false;
+
+  // messagesOlderEl/messagesLiveEl pakai display:contents (lihat CSS) --
+  // anak-anaknya tetap kena layout flex #messages persis kayak sebelum ada
+  // wrapper ini, cuma buat batesin mana yang boleh disentuh
+  // loadOlderMessages() vs listener live di bawah.
+  messagesLoadingOlderEl = document.createElement("div");
+  messagesLoadingOlderEl.className = "messages-loading-older hidden";
+  messagesLoadingOlderEl.textContent = "Memuat pesan lama...";
+  messagesOlderEl = document.createElement("div");
+  messagesOlderEl.style.display = "contents";
+  messagesLiveEl = document.createElement("div");
+  messagesLiveEl.style.display = "contents";
+  messagesEl.appendChild(messagesLoadingOlderEl);
+  messagesEl.appendChild(messagesOlderEl);
+  messagesEl.appendChild(messagesLiveEl);
+
+  // Cuma MESSAGES_PAGE_SIZE pesan terbaru yang live -- langganan lama
+  // dengan ribuan pesan dulu di-load & di-render SEMUA sekaligus tiap
+  // dibuka/refresh, makin lama makin berat. Pesan lebih lama dimuat sesuai
+  // kebutuhan lewat loadOlderMessages() (dipicu scroll ke atas).
   const q = query(
     collection(db, ...wsPath("chats", currentUser.uid, "messages")),
-    orderBy("timestamp", "asc")
+    orderBy("timestamp", "desc"),
+    limit(MESSAGES_PAGE_SIZE)
   );
   unsubMessages = onSnapshot(q, (snap) => {
-    messagesEl.innerHTML = "";
+    const docs = snap.docs.slice().reverse();
+    const wasNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+
     let latestAdminInfo = null;
-    let lastDate = null;
-    snap.forEach((docSnap) => {
+    docs.forEach((docSnap) => {
       const m = docSnap.data();
-      const dateLabel = formatDateWIB(m.timestamp);
-      if (dateLabel && dateLabel !== lastDate) {
-        messagesEl.appendChild(createDateDivider(dateLabel));
-        lastDate = dateLabel;
-      }
-      messagesEl.appendChild(renderMessage(m));
-      if (m.sender === "admin") {
-        latestAdminInfo = { name: m.senderName, photo: m.senderPhoto };
-      }
+      if (m.sender === "admin") latestAdminInfo = { name: m.senderName, photo: m.senderPhoto };
     });
+    // Jarang, tapi mungkin: 100 pesan terbaru semuanya dari customer sendiri
+    // (belum dibalas admin sama sekali dalam rentang itu) -- coba cari lagi
+    // di batch pesan lama yang sudah dimuat lewat loadOlderMessages(),
+    // supaya header "sedang chat dengan siapa" tidak kosong tanpa alasan.
+    if (!latestAdminInfo && knownAdminInfo) latestAdminInfo = knownAdminInfo;
+
+    const { fragment, firstDateLabel } = buildMessagesFragment(docs, olderBoundaryDateLabel);
+    messagesLiveEl.innerHTML = "";
+    messagesLiveEl.appendChild(fragment);
+
+    if (docs.length > 0) {
+      oldestLoadedMessageTimestamp = docs[0].data().timestamp;
+      if (!messagesOlderEl.firstElementChild) oldestRenderedDateLabel = firstDateLabel;
+    }
+    if (docs.length < MESSAGES_PAGE_SIZE) allOlderMessagesLoaded = true;
+
     if (latestAdminInfo) {
       knownAdminInfo = latestAdminInfo;
       updateChatHeader();
     }
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    // Cuma nempel ke bawah kalau customer memang lagi di dekat bawah --
+    // kalau lagi scroll ke atas baca histori lama, jangan diseret paksa ke
+    // bawah tiap ada pesan baru masuk.
+    if (wasNearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
   });
 }
+
+// Dipicu scroll ke atas (lihat listener di bawah) -- ambil MESSAGES_PAGE_SIZE
+// pesan berikutnya yang lebih lama dari oldestLoadedMessageTimestamp, sekali
+// baca (bukan listener live -- pesan lama jarang berubah) lalu ditempel di
+// ATAS tanpa bikin scroll "loncat". Sama persis dengan versi admin.js.
+async function loadOlderMessages() {
+  if (loadingOlderMessages || allOlderMessagesLoaded || !oldestLoadedMessageTimestamp || !currentUser) return;
+  const uid = currentUser.uid;
+  loadingOlderMessages = true;
+  messagesLoadingOlderEl.classList.remove("hidden");
+  try {
+    const q = query(
+      collection(db, ...wsPath("chats", uid, "messages")),
+      orderBy("timestamp", "desc"),
+      startAfter(oldestLoadedMessageTimestamp),
+      limit(MESSAGES_PAGE_SIZE)
+    );
+    const snap = await getDocs(q);
+    if (!currentUser || uid !== currentUser.uid) return; // sesi sudah ganti selagi nunggu
+
+    if (snap.empty) {
+      allOlderMessagesLoaded = true;
+      return;
+    }
+
+    const docs = snap.docs.slice().reverse();
+    const lastBatchDateLabel = formatDateWIB(docs[docs.length - 1].data().timestamp);
+
+    // Kalau tanggal pesan TERBARU di batch ini sama dengan divider paling
+    // atas yang lagi tampil, divider lama itu jadi dobel -- buang.
+    if (oldestRenderedDateLabel && lastBatchDateLabel === oldestRenderedDateLabel) {
+      const firstChild = messagesOlderEl.firstElementChild || messagesLiveEl.firstElementChild;
+      if (firstChild && firstChild.classList.contains("date-divider")) firstChild.remove();
+    }
+
+    const { fragment, firstDateLabel } = buildMessagesFragment(docs, null);
+    const prevScrollHeight = messagesEl.scrollHeight;
+    const prevScrollTop = messagesEl.scrollTop;
+    messagesOlderEl.prepend(fragment);
+    messagesEl.scrollTop = messagesEl.scrollHeight - prevScrollHeight + prevScrollTop;
+
+    oldestLoadedMessageTimestamp = docs[0].data().timestamp;
+    oldestRenderedDateLabel = firstDateLabel;
+    if (olderBoundaryDateLabel === null) olderBoundaryDateLabel = lastBatchDateLabel;
+    if (docs.length < MESSAGES_PAGE_SIZE) allOlderMessagesLoaded = true;
+  } catch (err) {
+    console.error("Gagal memuat pesan lama:", err);
+  } finally {
+    loadingOlderMessages = false;
+    messagesLoadingOlderEl.classList.add("hidden");
+  }
+}
+
+messagesEl.addEventListener("scroll", () => {
+  if (messagesEl.scrollTop < 60) loadOlderMessages();
+});
 
 async function touchCustomerDoc(lastMessage) {
   await setDoc(
