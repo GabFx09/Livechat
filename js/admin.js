@@ -167,7 +167,7 @@ async function listenPresence() {
     snap.forEach((child) => {
       presenceMap.set(child.key, child.val());
     });
-    renderCustomerList();
+    updatePresenceDots();
     updateChatHeaderPresence();
   });
 }
@@ -1227,6 +1227,7 @@ function renderCustomerList() {
     const waiting = unreadCount > 0;
 
     const li = document.createElement("li");
+    li.dataset.uid = uid; // dipakai updatePresenceDots() cari baris tanpa render ulang semua
     li.className =
       "user-item customer-item" +
       (uid === activeCustomerUid ? " active" : "") +
@@ -1282,6 +1283,22 @@ function renderCustomerList() {
 
     li.addEventListener("click", () => openCustomer(uid, data.name));
     customerListEl.appendChild(li);
+  });
+}
+
+// Presence (online/offline) berubah jauh lebih sering & tidak pernah
+// mengubah urutan/isi daftar (cuma listenCustomers() yang begitu) -- jadi
+// listenPresence() manggil ini, BUKAN renderCustomerList(), supaya tiap 1
+// customer connect/disconnect tidak bongkar-pasang seluruh sidebar (kerasa
+// pas customer lagi rame: sidebar kedip & scroll position ke-reset tiap
+// event). Cukup update titik presence di baris yang sudah ada.
+function updatePresenceDots() {
+  customerListEl.querySelectorAll(".customer-item").forEach((li) => {
+    const uid = li.dataset.uid;
+    const data = customersDataMap.get(uid);
+    const dot = li.querySelector(".presence-dot");
+    if (!data || !dot) return;
+    dot.className = "presence-dot " + (isCustomerOnline(uid, data) ? "online" : "offline");
   });
 }
 
