@@ -5,20 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Customer Service</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<!-- Lihat catatan yang sama di index.html soal kenapa cuma 3 preconnect + sisanya dns-prefetch, dan kenapa Google Fonts dimuat non-blocking. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- Lihat catatan yang sama di index.html -->
-<link rel="preconnect" href="https://www.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://livechat-saya-default-rtdb.asia-southeast1.firebasedatabase.app" crossorigin />
-<link rel="preconnect" href="https://content-firebaseappcheck.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://www.google.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+<link rel="dns-prefetch" href="https://www.gstatic.com" />
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
+<link rel="dns-prefetch" href="https://livechat-saya-default-rtdb.asia-southeast1.firebasedatabase.app" />
+<link rel="dns-prefetch" href="https://content-firebaseappcheck.googleapis.com" />
+<link rel="dns-prefetch" href="https://www.google.com" />
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" /></noscript>
 <link rel="stylesheet" href="/css/style.css" />
 <style>html, body { touch-action: pan-x pan-y; }</style>
 </head>
 <body>
+<main style="display: contents;">
 
   <section id="loading-screen" class="screen">
     <p class="loading-text">Memuat...</p>
@@ -73,5 +76,6 @@
   </section>
 
   <script type="module" src="/js/customer.js"></script>
+</main>
 </body>
 </html>

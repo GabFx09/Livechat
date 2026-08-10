@@ -5,23 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Customer Service</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<!-- preconnect dibatasi ke 3 origin yang BENERAN kritis buat cat pertama
+     (font + fetch branding cepat via REST, lihat customer.js). Lighthouse
+     nge-warning kalau preconnect lebih dari ~4: tiap preconnect rebutan
+     slot koneksi paralel di awal, kebanyakan preconnect ke origin yang
+     baru dipakai belakangan (SDK Firebase, Auth, RTDB, App Check,
+     reCAPTCHA -- semua ini sengaja jalan di BACKGROUND setelah form login
+     sudah tampil, lihat loadInitialDataInBackground()) malah bikin yang
+     kritis kebagian jatah lebih sedikit. Origin non-kritis itu masih
+     dikasih dns-prefetch (resolve DNS doang, jauh lebih murah dari
+     preconnect penuh) supaya tetap dapat sedikit head start. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- Domain Firebase/Google yang dipakai di jalur loading customer.js (SDK,
-     Firestore, Auth anonim, App Check/reCAPTCHA) -- preconnect di sini bikin
-     browser mulai DNS+TLS handshake-nya SEKARANG (paralel sama parsing HTML),
-     bukan nunggu baru mulai pas request pertama beneran ditembak. -->
-<link rel="preconnect" href="https://www.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://livechat-saya-default-rtdb.asia-southeast1.firebasedatabase.app" crossorigin />
-<link rel="preconnect" href="https://content-firebaseappcheck.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://www.google.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+<link rel="dns-prefetch" href="https://www.gstatic.com" />
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
+<link rel="dns-prefetch" href="https://livechat-saya-default-rtdb.asia-southeast1.firebasedatabase.app" />
+<link rel="dns-prefetch" href="https://content-firebaseappcheck.googleapis.com" />
+<link rel="dns-prefetch" href="https://www.google.com" />
+<!-- CSS Google Fonts dimuat non-blocking (trik media="print" lalu di-swap
+     ke "all" begitu selesai) -- tanpa ini stylesheet cross-origin ini
+     menahan render pertama sampai selesai di-fetch. noscript buat jaga-jaga
+     kalau JS gagal/lambat parse. -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" /></noscript>
 <link rel="stylesheet" href="css/style.css" />
 <style>html, body { touch-action: pan-x pan-y; }</style>
 </head>
 <body>
+<main style="display: contents;">
 
   <section id="loading-screen" class="screen">
     <p class="loading-text">Memuat...</p>
@@ -76,5 +89,6 @@
   </section>
 
   <script type="module" src="js/customer.js"></script>
+</main>
 </body>
 </html>
