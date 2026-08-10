@@ -56,6 +56,21 @@ html, body {
   width: 100%;
 }
 
+/* Perpindahan antar layar (login/chat di customer; Open/All/Arsip/
+   Statistik/tiap Pengaturan di admin -- semua pakai class ini) dulu
+   langsung "patah" ganti karena cuma toggle display lewat .hidden. Anim
+   ini otomatis muter sekali tiap sebuah .screen BERHENTI cocok .hidden
+   (baru ditampilkan), tanpa perlu nyentuh JS di mana pun .hidden itu
+   ditoggle. */
+@keyframes screenFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.screen:not(.hidden) {
+  animation: screenFadeIn 0.2s ease;
+}
+
 /* Scrollbar & focus polish, dipakai di seluruh app */
 * {
   scrollbar-width: thin;
@@ -90,6 +105,20 @@ html, body {
 
 button, a, input, textarea {
   font-family: inherit;
+}
+
+/* Feedback klik global -- sedikit "mengecil" pas ditekan, biar semua
+   tombol di seluruh app kerasa responsif walau gak masing-masing punya
+   animasi hover sendiri. Tombol yang sudah punya `transition` sendiri
+   (banyak yang sudah, lihat aturan per-komponen di bawah) tetap dominan
+   dipakai kalau lebih spesifik -- ini cuma default dasarnya. */
+button:not(:disabled) {
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+button:not(:disabled):active {
+  transform: scale(0.96);
 }
 
 /* Login screen */
