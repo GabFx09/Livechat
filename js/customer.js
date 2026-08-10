@@ -117,6 +117,25 @@ function wsPath(...segments) {
   return ["workspaces", workspaceId, ...segments];
 }
 
+// Memastikan workspaceId sudah pasti versi yang benar (bukan alias huruf
+// kecil, lihat resolveWorkspaceDataFast) sebelum kode manapun membangun
+// wsPath() buat nulis dokumen customer/chat. Dulu ini gak dijamin -- ada
+// race condition: kalau sign-in (App Check/reCAPTCHA) atau klik "Masuk"
+// duluan selesai daripada koreksi ID ini, dokumen customer/chat baru kadung
+// tertulis ke workspace ID yang salah huruf dan jadi tak terlihat admin
+// manapun. Memo (bukan dipanggil ulang tiap kali) supaya cuma nembak REST
+// fetch-nya sekali walau dipanggil dari beberapa tempat.
+let workspaceResolvedPromise = null;
+function resolveWorkspaceIdOnce() {
+  if (!workspaceResolvedPromise) {
+    workspaceResolvedPromise = withRetries(async () => {
+      const wsData = await resolveWorkspaceDataFast();
+      applyWorkspaceData(wsData);
+    });
+  }
+  return workspaceResolvedPromise;
+}
+
 // Kunci tanggal (YYYY-MM-DD) berdasarkan WIB, dipakai untuk mengelompokkan
 // counter statistik harian di dashboard admin.
 function todayKeyWIB() {
@@ -773,7 +792,7 @@ startBtn.addEventListener("click", async () => {
   startError.classList.add("hidden");
 
   try {
-    const user = await ensureSignedIn();
+    const [user] = await Promise.all([ensureSignedIn(), resolveWorkspaceIdOnce()]);
     // Dipakai ulang dari init() (lihat initialCustomerSnap) kalau ada --
     // fallback getDoc cuma buat jaga-jaga kalau entah kenapa belum keisi.
     const existingSnap = initialCustomerSnap || (await getDoc(doc(db, ...wsPath("customers", user.uid))));
@@ -941,8 +960,9 @@ function applyWorkspaceData(wsData) {
   setInterval(updateOfflineBanners, 60000);
 }
 
-// Dua alur ini ditembak BERSAMAAN dan SALING GAK NUNGGU, bukan satu
-// sesudah yang lain:
+// Dua alur ini ditembak BERSAMAAN, bukan satu sesudah yang lain -- tapi
+// keduanya tetap menunggu resolveWorkspaceIdOnce() lebih dulu sebelum
+// membangun wsPath() (lihat catatan di situ):
 // - Branding (dokumen workspace) diambil lewat REST langsung
 //   (resolveWorkspaceDataFast), gak lewat SDK -- lihat catatan panjang di
 //   situ soal kenapa. onBrandingSettled dipanggil begitu ini selesai
@@ -951,17 +971,17 @@ function applyWorkspaceData(wsData) {
 //   di sana.
 // - Auto-rejoin BUTUH uid (hasil sign-in lewat SDK) buat tahu dokumen
 //   customer mana yang harus dicek, jadi tetap lewat jalur SDK+App Check
-//   biasa -- tapi ini gak lagi menahan branding supaya nongol bareng.
+//   biasa, ditembak paralel sama sign-in -- tapi ini gak lagi menahan
+//   branding supaya nongol bareng.
 function loadInitialDataInBackground(onBrandingSettled) {
-  withRetries(async () => {
-    const wsData = await resolveWorkspaceDataFast();
-    applyWorkspaceData(wsData);
-  }).finally(() => {
+  const workspaceResolved = resolveWorkspaceIdOnce();
+
+  workspaceResolved.finally(() => {
     if (onBrandingSettled) onBrandingSettled();
   });
 
   withRetries(async () => {
-    const user = await ensureSignedIn();
+    const [user] = await Promise.all([ensureSignedIn(), workspaceResolved]);
     const customerSnap = await getDoc(doc(db, ...wsPath("customers", user.uid)));
     initialCustomerSnap = customerSnap;
     // Auto rejoin kalau browser ini sudah pernah chat sebelumnya -- TAPI
