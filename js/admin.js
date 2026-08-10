@@ -694,13 +694,22 @@ async function enterDashboard(uid, email, workspaceId, adminData = {}) {
   if (autoArchiveIntervalId) clearInterval(autoArchiveIntervalId);
   autoArchiveIntervalId = setInterval(checkAutoArchive, 60000);
 
-  // Status online/offline butuh dicek ulang berkala juga (bukan cuma pas ada
-  // snapshot baru), karena berlalunya waktu sendiri tidak memicu snapshot.
+  // Status online/offline lewat RTDB sudah live-update sendiri tiap ada
+  // connect/disconnect (lihat listenPresence() -> updatePresenceDots()),
+  // gak butuh dicek ulang berkala. Interval ini cuma perlu buat fallback lama
+  // (Firestore lastActiveAt, dipakai kalau rtdb belum di-setup), yang memang
+  // butuh threshold waktu berjalan supaya status basi ke-update walau tidak
+  // ada snapshot baru. Sebelumnya interval ini nembak SETIAP 5 DETIK TANPA
+  // SYARAT dan bongkar-pasang SELURUH sidebar (renderCustomerList() penuh)
+  // -- peninggalan sebelum migrasi ke RTDB yang gak pernah dibersihkan,
+  // salah satu sumber utama sidebar kerasa "berat" walau lagi sepi sekalipun.
   if (presenceIntervalId) clearInterval(presenceIntervalId);
-  presenceIntervalId = setInterval(() => {
-    renderCustomerList();
-    updateChatHeaderPresence();
-  }, 5000);
+  if (!rtdb) {
+    presenceIntervalId = setInterval(() => {
+      renderCustomerList();
+      updateChatHeaderPresence();
+    }, 5000);
+  }
 
   applyRoute();
 }
@@ -1087,6 +1096,7 @@ async function toggleArchive(uid, archived) {
 function listenCustomers() {
   const q = query(collection(db, ...wsPath("customers")), orderBy("lastMessageAt", "desc"), limit(CUSTOMERS_PAGE_SIZE));
   onSnapshot(q, (snap) => {
+    const isFirstLoad = !customersInitialLoadDone;
     let shouldPlaySound = false;
     const newMessageNames = [];
     const newLiveOrder = [];
@@ -1121,6 +1131,17 @@ function listenCustomers() {
     liveCustomerUids = newLiveSet;
     liveCustomerOrder = newLiveOrder;
 
+    // BUG NYATA (bukan dari sesi ini, sudah ada sejak paginasi sidebar
+    // dibuat): customer yang sempat di-scroll-load ke olderCustomerUids,
+    // lalu dapat pesan baru dan masuk lagi ke liveCustomerOrder, jadi
+    // nyangkut di DUA array sekaligus -- getCustomerOrder() (dipakai
+    // renderCustomerList()/getVisibleCustomerEntries()) menghasilkan uid
+    // yang sama 2x, jadi tampil dobel di sidebar. Bersihkan dari
+    // olderCustomerUids begitu dia balik ke live lagi.
+    if (olderCustomerUids.length > 0) {
+      olderCustomerUids = olderCustomerUids.filter((uid) => !newLiveSet.has(uid));
+    }
+
     // Cursor buat loadOlderCustomers() cuma diatur dari sini SELAMA belum
     // ada halaman older yang dimuat -- listener ini bisa nembak sering
     // banget (tiap ada 1 pesan baru di mana pun), jangan sampai nge-reset
@@ -1136,7 +1157,22 @@ function listenCustomers() {
     }
     customersInitialLoadDone = true;
 
-    renderCustomerList();
+    // Rebuild penuh cuma pas listener ini baru pertama kali nyala (login /
+    // buka dashboard) -- sesudahnya cukup tempel baris yang benar-benar
+    // berubah lewat docChanges(), lihat catatan di patchCustomerListFromChanges().
+    if (isFirstLoad) {
+      renderCustomerList();
+    } else {
+      // PENTING: change.newIndex (dari docChanges() di bawah) adalah indeks
+      // di snap.docs APA ADANYA -- BUKAN newLiveOrder, yang diam-diam
+      // melewati dokumen tanpa field `name` (lihat "if (!data.name) return"
+      // di snap.forEach() di atas). Kalau dipakai newLiveOrder langsung dan
+      // ada 1 saja dokumen tanpa nama di antaranya, indeksnya geser dan baris
+      // bisa disisip di posisi yang salah/dobel kelihatannya -- jadi susun
+      // ulang array id APA ADANYA (rawSnapOrder) khusus buat pencarian anchor.
+      const rawSnapOrder = snap.docs.map((d) => d.id);
+      patchCustomerListFromChanges(snap.docChanges(), rawSnapOrder);
+    }
     updateRailBadge();
     updateTypingPreview();
     checkAutoArchive();
@@ -1308,90 +1344,119 @@ function updateRailBadge() {
   updateTabNotification(total);
 }
 
+// Sama seperti getVisibleCustomerEntries()/renderCustomerList() lama: tab
+// Aktif/Arsip diabaikan pas lagi ada kata pencarian (customer mau nemu
+// chat-nya, bukan dibatasi tab mana yang kebuka).
+function customerMatchesCurrentFilter(data) {
+  if (!data) return false;
+  if (searchQuery) return matchesSearch(data);
+  const isArchived = !!data.archived;
+  if (currentListView === "archived") return isArchived;
+  if (currentListView === "active") return !isArchived;
+  return true; // "all"
+}
+
+function getCustomerRowEl(uid) {
+  return customerListEl.querySelector('.customer-item[data-uid="' + uid + '"]');
+}
+
+// Hapus SEMUA baris <li> milik 1 uid (bukan cuma yang pertama ketemu lewat
+// getCustomerRowEl/querySelector) -- dipakai patchCustomerListFromChanges()
+// sebagai pengaman sebelum nyisip baris baru, supaya kalau karena sebab
+// apa pun sempat ada >1 baris nyangkut buat uid yang sama, semuanya
+// dibersihkan dulu (bukan cuma 1), gak numpuk jadi dobel di sidebar.
+function removeCustomerRowEls(uid) {
+  customerListEl.querySelectorAll('.customer-item[data-uid="' + uid + '"]').forEach((el) => el.remove());
+}
+
+// Bangun 1 baris <li> customer -- dipakai renderCustomerList() (rebuild
+// penuh) MAUPUN patchCustomerListFromChanges() (tempel baris yang berubah
+// saja), supaya kedua jalur render selalu menghasilkan markup yang identik.
+function buildCustomerRowEl(uid, data) {
+  const isArchived = !!data.archived;
+  const unreadCount = data.unreadCount || 0;
+  const waiting = unreadCount > 0;
+
+  const li = document.createElement("li");
+  li.dataset.uid = uid; // dipakai updatePresenceDots()/getCustomerRowEl() cari baris tanpa render ulang semua
+  li.className =
+    "user-item customer-item" +
+    (uid === activeCustomerUid ? " active" : "") +
+    (waiting ? " waiting" : "");
+
+  const avatar = document.createElement("div");
+  avatar.className = "customer-avatar";
+  avatar.style.backgroundColor = colorForId(uid);
+  avatar.appendChild(createPersonIcon());
+
+  const presenceDot = document.createElement("span");
+  presenceDot.className = "presence-dot " + (isCustomerOnline(uid, data) ? "online" : "offline");
+  avatar.appendChild(presenceDot);
+
+  li.appendChild(avatar);
+
+  const info = document.createElement("div");
+  info.className = "customer-info";
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "name-row";
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "customer-name-text";
+  nameSpan.textContent = data.name;
+  nameRow.appendChild(nameSpan);
+  if (waiting) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = String(unreadCount);
+    nameRow.appendChild(badge);
+  }
+  // Hasil pencarian bisa nyelip dari luar tab yang lagi kebuka (lihat
+  // getVisibleCustomerEntries/customerMatchesCurrentFilter di atas) -- tag
+  // ini ngasih tau kenapa chat yang diarsipkan muncul pas lagi di tab Aktif.
+  if (searchQuery && isArchived && currentListView !== "archived") {
+    const archivedTag = document.createElement("span");
+    archivedTag.className = "badge archived-tag";
+    archivedTag.textContent = "Arsip";
+    nameRow.appendChild(archivedTag);
+  }
+  const timeSpan = document.createElement("span");
+  timeSpan.className = "customer-time";
+  timeSpan.textContent = formatListTimestamp(data.lastMessageAt);
+  nameRow.appendChild(timeSpan);
+  info.appendChild(nameRow);
+
+  const preview = document.createElement("span");
+  preview.className = "preview";
+  preview.textContent = data.lastMessage || "";
+  info.appendChild(preview);
+
+  li.appendChild(info);
+
+  li.addEventListener("click", () => openCustomer(uid, data.name));
+  return li;
+}
+
 function renderCustomerList() {
   // customerListEl.scrollTop kepaksa balik ke 0 begitu innerHTML dikosongkan
   // (gak ada lagi yang bisa di-scroll sesaat) dan TIDAK otomatis balik ke
   // posisi semula walau kekisi ulang -- jadi harus disimpan & dipulihkan
-  // manual di sini. Fungsi ini bisa nembak sering banget (tiap ada 1 pesan
-  // baru di mana pun di live window), jangan sampai admin yang lagi scroll
-  // ke bawah baca customer lama diseret balik ke atas tiap kali itu terjadi.
-  // Beda dari pesan chat (yang pesan lamanya di-PREPEND ke atas, butuh
-  // kompensasi delta tinggi) -- customer lama selalu ditambah di BAWAH lewat
-  // loadOlderCustomers(), jadi cukup pulihkan scrollTop apa adanya, gak
-  // perlu hitung delta scrollHeight.
+  // manual di sini. Beda dari pesan chat (yang pesan lamanya di-PREPEND ke
+  // atas, butuh kompensasi delta tinggi) -- customer lama selalu ditambah di
+  // BAWAH lewat loadOlderCustomers(), jadi cukup pulihkan scrollTop apa
+  // adanya, gak perlu hitung delta scrollHeight.
+  //
+  // Rebuild penuh ini sekarang HANYA dipakai buat kasus yang beneran ubah
+  // keseluruhan tampilan (load pertama listenCustomers(), ganti tab
+  // Aktif/Arsip, ganti kata pencarian, loadOlderCustomers()) -- update
+  // per-pesan lewat listenCustomers() lewat patchCustomerListFromChanges()
+  // di bawah, bukan sini lagi.
   const prevScrollTop = customerListEl.scrollTop;
   customerListEl.innerHTML = "";
 
   getCustomerOrder().forEach((uid) => {
     const data = customersDataMap.get(uid);
-    if (!data) return;
-    const isArchived = !!data.archived;
-    if (!searchQuery) {
-      if (currentListView === "archived" && !isArchived) return;
-      if (currentListView === "active" && isArchived) return;
-    }
-    if (!matchesSearch(data)) return;
-
-    const unreadCount = data.unreadCount || 0;
-    const waiting = unreadCount > 0;
-
-    const li = document.createElement("li");
-    li.dataset.uid = uid; // dipakai updatePresenceDots() cari baris tanpa render ulang semua
-    li.className =
-      "user-item customer-item" +
-      (uid === activeCustomerUid ? " active" : "") +
-      (waiting ? " waiting" : "");
-
-    const avatar = document.createElement("div");
-    avatar.className = "customer-avatar";
-    avatar.style.backgroundColor = colorForId(uid);
-    avatar.appendChild(createPersonIcon());
-
-    const presenceDot = document.createElement("span");
-    presenceDot.className = "presence-dot " + (isCustomerOnline(uid, data) ? "online" : "offline");
-    avatar.appendChild(presenceDot);
-
-    li.appendChild(avatar);
-
-    const info = document.createElement("div");
-    info.className = "customer-info";
-
-    const nameRow = document.createElement("div");
-    nameRow.className = "name-row";
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "customer-name-text";
-    nameSpan.textContent = data.name;
-    nameRow.appendChild(nameSpan);
-    if (waiting) {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = String(unreadCount);
-      nameRow.appendChild(badge);
-    }
-    // Hasil pencarian bisa nyelip dari luar tab yang lagi kebuka (lihat
-    // getVisibleCustomerEntries/renderCustomerList di atas) -- tag ini
-    // ngasih tau kenapa chat yang diarsipkan muncul pas lagi di tab Aktif.
-    if (searchQuery && isArchived && currentListView !== "archived") {
-      const archivedTag = document.createElement("span");
-      archivedTag.className = "badge archived-tag";
-      archivedTag.textContent = "Arsip";
-      nameRow.appendChild(archivedTag);
-    }
-    const timeSpan = document.createElement("span");
-    timeSpan.className = "customer-time";
-    timeSpan.textContent = formatListTimestamp(data.lastMessageAt);
-    nameRow.appendChild(timeSpan);
-    info.appendChild(nameRow);
-
-    const preview = document.createElement("span");
-    preview.className = "preview";
-    preview.textContent = data.lastMessage || "";
-    info.appendChild(preview);
-
-    li.appendChild(info);
-
-    li.addEventListener("click", () => openCustomer(uid, data.name));
-    customerListEl.appendChild(li);
+    if (!data || !customerMatchesCurrentFilter(data)) return;
+    customerListEl.appendChild(buildCustomerRowEl(uid, data));
   });
 
   customerListLoadingOlderEl = document.createElement("li");
@@ -1400,6 +1465,60 @@ function renderCustomerList() {
   customerListEl.appendChild(customerListLoadingOlderEl);
 
   customerListEl.scrollTop = prevScrollTop;
+}
+
+// Cari elemen <li> yang seharusnya PERSIS SETELAH baris yang baru
+// ditempel/dipindah, mulai dari posisi startIndex di rawSnapOrder (id APA
+// ADANYA per snap.docs, SAMA persis urutannya dengan indeks docChange.newIndex
+// -- lihat catatan panjang di pemanggilnya soal kenapa harus versi "apa
+// adanya", bukan newLiveOrder yang sudah difilter nama) -- dipakai
+// insertBefore() supaya urutan tetap benar walau beberapa customer dapat
+// pesan baru sekaligus dalam 1 snapshot. Lompat id yang gak ada barisnya di
+// DOM (nameless, atau lolos filter tab/pencarian saat ini), lanjut ke
+// customer "older" pertama, atau paling akhir taruh sebelum indikator loading.
+function findCustomerInsertionAnchor(startIndex, rawSnapOrder) {
+  for (let i = startIndex; i < rawSnapOrder.length; i++) {
+    const el = getCustomerRowEl(rawSnapOrder[i]);
+    if (el) return el;
+  }
+  for (let i = 0; i < olderCustomerUids.length; i++) {
+    const el = getCustomerRowEl(olderCustomerUids[i]);
+    if (el) return el;
+  }
+  return customerListLoadingOlderEl && customerListLoadingOlderEl.parentNode ? customerListLoadingOlderEl : null;
+}
+
+// Tempel HANYA baris customer yang benar-benar berubah di snapshot ini
+// (docChanges(), bukan snap.forEach() penuh) -- gantinya renderCustomerList()
+// yang tadinya kepanggil TIAP ADA 1 PESAN BARU DI MANA PUN di workspace,
+// bongkar-pasang seluruh <li> (termasuk yang sudah di-scroll/load lewat
+// loadOlderCustomers()). Sidebar yang isinya ratusan chat, tiap pesan baru
+// dari SIAPA PUN dulu bikin semuanya kerender ulang -- ini sumber "berat"
+// utama selain interval 5-detik yang sudah dihapus di atas.
+function patchCustomerListFromChanges(changes, rawSnapOrder) {
+  changes.forEach((change) => {
+    const uid = change.doc.id;
+    const data = change.doc.data();
+
+    if (change.type === "removed") {
+      // Kegeser keluar dari live window (BUKAN berarti dihapus beneran) --
+      // kalau masih valid lewat olderCustomerUids (hasil loadOlderCustomers),
+      // biarkan barisnya tetap ada, cuma jadi statis (perilaku lama, gak
+      // berubah).
+      if (!olderCustomerUids.includes(uid)) removeCustomerRowEls(uid);
+      return;
+    }
+    if (!data.name) {
+      removeCustomerRowEls(uid);
+      return;
+    }
+
+    removeCustomerRowEls(uid);
+    if (!customerMatchesCurrentFilter(data)) return; // gak lolos tab/pencarian aktif saat ini
+
+    const newEl = buildCustomerRowEl(uid, data);
+    customerListEl.insertBefore(newEl, findCustomerInsertionAnchor(change.newIndex + 1, rawSnapOrder));
+  });
 }
 
 // Presence (online/offline) berubah jauh lebih sering & tidak pernah
