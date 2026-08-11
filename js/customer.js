@@ -737,6 +737,13 @@ async function touchCustomerDoc(lastMessage) {
       name: currentUser.name,
       lastMessage,
       lastMessageAt: serverTimestamp(),
+      // Field TERPISAH dari lastMessageAt di atas -- ini cuma disentuh di
+      // sini (pas customer BENERAN kirim pesan), dipakai firestore.rules'
+      // customerNotSpamming() buat anti-spam. lastMessageAt sendiri ikut
+      // ke-update tiap admin/bot ngirim juga, jadi gak bisa dipakai buat
+      // anti-spam customer tanpa salah nolak pesan yang kebetulan nyusul
+      // cepat setelah balasan admin/bot (lihat catatan di firestore.rules).
+      lastCustomerMessageAt: serverTimestamp(),
       lastSender: "customer",
       unreadCount: increment(1),
       archived: false,
