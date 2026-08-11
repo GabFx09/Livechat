@@ -1020,11 +1020,23 @@ startBtn.addEventListener("click", async () => {
 
     const initialUpdate = {
       name,
-      lastMessage: "",
-      lastMessageAt: serverTimestamp(),
-      lastSender: null,
       lastSeenAt: serverTimestamp()
     };
+    // Cuma diinisialisasi kosong buat customer BARU -- dulu 3 field ini
+    // ditulis tanpa syarat di sini, jadi kalau customer LAMA sempat
+    // nyampe form ini (race: loadInitialDataInBackground() punya
+    // auto-rejoin sendiri yang jalan di background, tapi kalau customer
+    // ngetik nama & klik "Masuk" duluan sebelum auto-rejoin itu selesai,
+    // form ini yang kepanggil) -- lastMessage/lastSender ke-timpa jadi
+    // kosong/null dan lastMessageAt ke-refresh ke waktu SEKARANG, padahal
+    // history chat aslinya (subkoleksi messages) sama sekali gak berubah.
+    // Efeknya: sidebar admin nunjukin baris "kosong" dengan jam terbaru
+    // buat customer yang sebenarnya udah lama chat.
+    if (isNewCustomer) {
+      initialUpdate.lastMessage = "";
+      initialUpdate.lastMessageAt = serverTimestamp();
+      initialUpdate.lastSender = null;
+    }
     if (sessionReset) initialUpdate.optionSelectCount = 0;
     // Dulu field ini cuma keisi pas pertama kali diarsipkan -- jadi
     // dokumen customer lama/baru-mulai-chat sempat gak punya field
