@@ -522,11 +522,34 @@ savedRepliesCloseBtn.addEventListener("click", () => {
   savedRepliesOverlay.classList.add("hidden");
 });
 
+function autoResizeSavedReplyInput() {
+  savedReplyInput.style.height = "auto";
+  savedReplyInput.style.height = savedReplyInput.scrollHeight + "px";
+}
+
+savedReplyInput.addEventListener("input", autoResizeSavedReplyInput);
+
+// Sama polanya kayak #message-input: Enter polos = simpan (textarea bawaan
+// gak pernah submit form sendiri, cuma nambah baris terus), Shift+Enter =
+// baris baru. Sebelumnya field ini <input type="text"> biasa -- Enter gak
+// bisa dipakai bikin baris baru sama sekali (langsung submit form), jadi
+// saved reply yang butuh banyak baris cuma bisa dibuat lewat paste teks
+// multi-baris, dan .saved-reply-text di daftar juga gak preserve \n-nya
+// (white-space default CSS ngegabung jadi 1 baris) -- makanya kelihatan
+// "sejajar" walau data teksnya sendiri sebenarnya sudah benar.
+savedReplyInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    savedReplyForm.requestSubmit();
+  }
+});
+
 savedReplyForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = savedReplyInput.value.trim();
   if (!text || !currentAdmin) return;
   savedReplyInput.value = "";
+  autoResizeSavedReplyInput();
   try {
     await addDoc(collection(db, ...wsPath("admins", currentAdmin.uid, "savedReplies")), {
       text,
