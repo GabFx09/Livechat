@@ -23,6 +23,15 @@ export async function compressImageFile(
   if (!file.type.startsWith("image/")) {
     throw new Error("File yang dipilih bukan gambar.");
   }
+  // HEIC/HEIF (format foto default iPhone) tidak bisa didekode lewat
+  // <img>/canvas di hampir semua browser selain Safari -- daripada gagal
+  // diam-diam lewat img.onerror di bawah dengan pesan generik, kasih tahu
+  // penyebabnya langsung supaya customer tahu harus ganti format.
+  if (/^image\/hei(c|f)/.test(file.type) || /\.hei(c|f)$/i.test(file.name || "")) {
+    throw new Error(
+      "Format HEIC/HEIF belum didukung. Ubah pengaturan kamera ke JPG (\"Paling Kompatibel\") atau kirim sebagai screenshot."
+    );
+  }
 
   const img = await loadImageFile(file);
   let width = img.naturalWidth;
@@ -41,7 +50,13 @@ export async function compressImageFile(
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+  const ctx = canvas.getContext("2d");
+  // Isi latar putih dulu -- JPEG tidak punya kanal alpha, jadi tanpa ini
+  // area transparan (PNG berlatar transparan, atau gambar yang gagal
+  // digambar penuh) akan diekspor jadi hitam solid oleh toDataURL.
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
 
   let quality = 0.85;
   let dataUrl = canvas.toDataURL(mimeType, quality);
