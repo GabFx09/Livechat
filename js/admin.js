@@ -71,6 +71,7 @@ if (RECAPTCHA_V3_SITE_KEY && !RECAPTCHA_V3_SITE_KEY.startsWith("PASTE_")) {
 let currentAdmin = null; // { uid, email, name, photo, workspaceId, workspaceName }
 let activeCustomerUid = null;
 let activeCustomerName = "";
+let editingCustomerNameUid = null; // lihat startEditCustomerName() & listenCustomers()
 let unsubMessages = null;
 // Chat yang sudah lama bisa punya ribuan pesan -- me-load dan nge-render
 // SEMUANYA sekaligus tiap buka chat (perilaku lama) makin lama makin berat
@@ -1209,7 +1210,12 @@ function listenCustomers() {
     updateTypingPreview();
     checkAutoArchive();
 
-    if (activeCustomerUid && customersDataMap.has(activeCustomerUid)) {
+    // editingCustomerNameUid: jangan render ulang panel selagi admin lagi
+    // ngetik nama baru (lihat startEditCustomerName()) -- kalau tidak,
+    // snapshot ini bisa nembak KAPAN SAJA (mis. customer kirim pesan baru
+    // ikut nyentuh dokumen customer) dan form edit yang lagi diisi ke-reset
+    // tiba-tiba di tengah jalan.
+    if (activeCustomerUid && customersDataMap.has(activeCustomerUid) && editingCustomerNameUid !== activeCustomerUid) {
       renderCustomerPanel(customersDataMap.get(activeCustomerUid), activeCustomerUid);
     }
     updateChatHeaderPresence();
@@ -1572,8 +1578,37 @@ function updatePresenceDots() {
 function renderCustomerPanel(data, uid) {
   customerPanelBody.innerHTML = "";
 
+  const nameRow = document.createElement("div");
+  nameRow.className = "detail-row";
+  const nameLabelEl = document.createElement("span");
+  nameLabelEl.className = "detail-label";
+  nameLabelEl.textContent = "Nama";
+
+  const nameValueWrap = document.createElement("div");
+  nameValueWrap.className = "detail-value-row";
+  const nameValueEl = document.createElement("span");
+  nameValueEl.className = "detail-value";
+  nameValueEl.textContent = data.name || "-";
+  nameValueWrap.appendChild(nameValueEl);
+
+  // Superadmin cuma lihat+ekspor -- rules juga sudah nolak tulisannya
+  // (allow update selain unreadCount cuma buat operator), ini cuma biar
+  // tombolnya gak kelihatan sama sekali.
+  if (!isSuperadmin()) {
+    const editNameBtn = document.createElement("button");
+    editNameBtn.type = "button";
+    editNameBtn.className = "msg-action-btn";
+    editNameBtn.title = "Edit nama";
+    editNameBtn.textContent = "✏";
+    editNameBtn.addEventListener("click", () => startEditCustomerName(uid, data.name || "", nameValueWrap));
+    nameValueWrap.appendChild(editNameBtn);
+  }
+
+  nameRow.appendChild(nameLabelEl);
+  nameRow.appendChild(nameValueWrap);
+  customerPanelBody.appendChild(nameRow);
+
   const fields = [
-    { label: "Nama", value: data.name },
     { label: "Alamat IP", value: data.ip },
     { label: "Kota", value: data.city },
     { label: "Provinsi/Wilayah", value: data.region },
@@ -1619,6 +1654,76 @@ function renderCustomerPanel(data, uid) {
   deleteAllBtn.textContent = "Hapus Semua Chat";
   deleteAllBtn.addEventListener("click", () => deleteAllChat(uid, data.name));
   customerPanelBody.appendChild(deleteAllBtn);
+}
+
+// Ganti nama customer dari sisi admin (mis. customer isi nama asal-asalan
+// pas "Masuk", admin mau kasih nama yang lebih jelas). Sama persis polanya
+// dengan startEditMessage() (ganti value jadi input+Simpan/Batal). Sesudah
+// updateDoc sukses, panel ini sendiri tidak perlu di-render manual --
+// listenCustomers() sudah otomatis manggil renderCustomerPanel() ulang tiap
+// dokumen customer yang lagi aktif berubah (lihat listenCustomers()).
+function startEditCustomerName(uid, currentName, wrapEl) {
+  editingCustomerNameUid = uid;
+
+  const editWrap = document.createElement("div");
+  editWrap.className = "edit-wrap";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "edit-input";
+  input.value = currentName;
+  input.maxLength = 100;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "edit-save-btn";
+  saveBtn.textContent = "Simpan";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "edit-cancel-btn";
+  cancelBtn.textContent = "Batal";
+
+  editWrap.appendChild(input);
+  editWrap.appendChild(saveBtn);
+  editWrap.appendChild(cancelBtn);
+  wrapEl.replaceWith(editWrap);
+  input.focus();
+  input.select();
+
+  const cancel = () => {
+    editingCustomerNameUid = null;
+    editWrap.replaceWith(wrapEl);
+  };
+  cancelBtn.addEventListener("click", cancel);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") cancel();
+    if (e.key === "Enter") saveBtn.click();
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    const newName = input.value.trim();
+    if (!newName) return;
+    saveBtn.disabled = true;
+    try {
+      await updateDoc(doc(db, ...wsPath("customers", uid)), { name: newName });
+      editingCustomerNameUid = null;
+      // Header chat & label pengirim di bubble yang lagi tampil (kalau
+      // customer ini yang lagi dibuka) tidak ikut ke-refresh otomatis lewat
+      // listener pesan (nama pengirim itu dibaca dari activeCustomerName,
+      // bukan dari dokumen customer) -- update manual di sini.
+      if (uid === activeCustomerUid) {
+        activeCustomerName = newName;
+        chatHeaderText.textContent = "Chat dengan " + newName;
+        messagesEl.querySelectorAll(".message.theirs .sender").forEach((el) => {
+          el.textContent = newName;
+        });
+      }
+    } catch (err) {
+      alert("Gagal menyimpan nama: " + err.message);
+      saveBtn.disabled = false;
+    }
+  });
 }
 
 // Hapus seluruh riwayat chat + dokumen profil customer. Dokumen customer ikut
@@ -1762,6 +1867,24 @@ function createDateDivider(label) {
 // SUDAH tampil tepat sebelum batch ini (kalau ada) -- dipakai supaya divider
 // pertama batch ini tidak dobel kalau tanggalnya sama dengan yang di
 // sambungan (lihat pemakaiannya di openCustomer()/loadOlderMessages()).
+// Tempel 1 bubble pesan baru di ujung bawah messagesLiveEl TANPA menyentuh
+// bubble lain -- dipakai loadMessages() (lihat catatan di sana) supaya 1
+// pesan baru masuk tidak memaksa SEMUA bubble di window (termasuk <img>
+// base64 yang bisa ratusan KB tiap gambar) ke-decode ulang oleh browser.
+// dataset.dateLabel (diisi renderMessage()) dipakai baca "tanggal terakhir
+// yang lagi tampil" langsung dari DOM, tanpa perlu state terpisah.
+function appendLiveMessage(m, messageId) {
+  const dateLabel = formatDateWIB(m.timestamp);
+  const lastChild = messagesLiveEl.lastElementChild;
+  const lastDateLabel = !lastChild
+    ? null
+    : lastChild.classList.contains("date-divider")
+      ? lastChild.textContent
+      : lastChild.dataset.dateLabel;
+  if (dateLabel && dateLabel !== lastDateLabel) messagesLiveEl.appendChild(createDateDivider(dateLabel));
+  messagesLiveEl.appendChild(renderMessage(m, messageId));
+}
+
 function buildMessagesFragment(docs, precedingDateLabel) {
   const fragment = document.createDocumentFragment();
   let lastDate = precedingDateLabel || null;
@@ -1782,6 +1905,8 @@ function buildMessagesFragment(docs, precedingDateLabel) {
 function renderMessage(m, messageId) {
   const div = document.createElement("div");
   div.className = "message " + (m.sender === "admin" ? "mine" : "theirs");
+  div.dataset.messageId = messageId;
+  div.dataset.dateLabel = formatDateWIB(m.timestamp);
 
   const isOwnMessage = m.sender === "admin" && m.senderId === currentAdmin.uid;
 
@@ -1937,6 +2062,7 @@ async function deleteMessage(messageId) {
 function openCustomer(uid, name) {
   activeCustomerUid = uid;
   activeCustomerName = name;
+  editingCustomerNameUid = null;
   chatHeaderText.textContent = "Chat dengan " + name;
   updateChatHeaderPresence();
   infoToggleBtn.classList.remove("hidden");
@@ -1998,16 +2124,76 @@ function openCustomer(uid, name) {
     const docs = snap.docs.slice().reverse();
     const wasNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
 
-    const { fragment, firstDateLabel } = buildMessagesFragment(docs, olderBoundaryDateLabel);
-    messagesLiveEl.innerHTML = "";
-    messagesLiveEl.appendChild(fragment);
+    // Rebuild penuh (innerHTML="" + render ulang SEMUA sampai 100 bubble)
+    // tiap kali snapshot ini nembak -- termasuk buat 1 pesan baru doang --
+    // kerasa lambat di chat yang riwayatnya panjang & banyak gambar (base64
+    // langsung di dokumen, bisa ratusan KB/gambar): SEMUA <img> di window
+    // ke-decode ulang biarpun tidak berubah. Kasus paling umum (customer
+    // kirim 1 pesan baru, kadang dibarengi 1 pesan lama kegeser keluar
+    // window karena limit(100)) ditangani lewat tempel/copot 1 bubble saja.
+    // Selain kasus itu (edit/hapus pesan, atau messagesOlderEl sudah terisi
+    // -- lagi baca histori lama, jangan senggol seam-nya) tetap jatuh balik
+    // ke rebuild penuh, sudah teruji dan jarang kepakai jadi risikonya kecil.
+    const changes = snap.docChanges();
+    const removedChange = changes.find((c) => c.type === "removed");
+    // "removed" bisa berarti 2 hal: pesan tertua kegeser keluar window
+    // (limit(100), aman ditempel/copot) ATAU admin beneran hapus 1 pesan di
+    // TENGAH riwayat (kalau dipatch parsial, divider tanggalnya bisa jadi
+    // yatim di tengah list -- cuma cek elemen pertama, tidak ke-cover).
+    // Bedakan dengan cek posisi: aman cuma kalau bubble yang kehapus itu
+    // pesan TERTUA yang lagi tampil (elemen pertama, atau tepat sesudah
+    // divider tanggal kalau itu yang di elemen pertama).
+    const removedEl = removedChange
+      ? messagesLiveEl.querySelector(`[data-message-id="${CSS.escape(removedChange.doc.id)}"]`)
+      : null;
+    const removedIsOldest =
+      !removedChange ||
+      !removedEl ||
+      messagesLiveEl.firstElementChild === removedEl ||
+      (messagesLiveEl.firstElementChild &&
+        messagesLiveEl.firstElementChild.classList.contains("date-divider") &&
+        messagesLiveEl.firstElementChild.nextElementSibling === removedEl);
+    const canPatchIncrementally =
+      messagesLiveEl.childElementCount > 0 &&
+      messagesOlderEl.childElementCount === 0 &&
+      changes.length > 0 &&
+      changes.every((c) => c.type === "added" || c.type === "removed") &&
+      changes.filter((c) => c.type === "added").length <= 1 &&
+      changes.filter((c) => c.type === "removed").length <= 1 &&
+      removedIsOldest;
+
+    if (canPatchIncrementally) {
+      const prevOldestRenderedDateLabel = oldestRenderedDateLabel;
+      if (removedEl) removedEl.remove();
+      changes
+        .filter((c) => c.type === "added")
+        .forEach((c) => appendLiveMessage(c.doc.data(), c.doc.id));
+
+      // Pesan tertua di window kegeser keluar -> divider tanggalnya (kalau
+      // ada, selalu jadi elemen pertama) bisa jadi yatim (tidak ada lagi
+      // pesan tanggal itu di window) -- buang cuma kalau tanggal tertua
+      // BENERAN berubah, biar tidak salah buang divider yang masih valid.
+      const newOldestDateLabel = docs.length > 0 ? formatDateWIB(docs[0].data().timestamp) : null;
+      if (
+        messagesLiveEl.firstElementChild &&
+        messagesLiveEl.firstElementChild.classList.contains("date-divider") &&
+        messagesLiveEl.firstElementChild.textContent === prevOldestRenderedDateLabel &&
+        prevOldestRenderedDateLabel !== newOldestDateLabel
+      ) {
+        messagesLiveEl.firstElementChild.remove();
+      }
+    } else {
+      const { fragment } = buildMessagesFragment(docs, olderBoundaryDateLabel);
+      messagesLiveEl.innerHTML = "";
+      messagesLiveEl.appendChild(fragment);
+    }
 
     if (docs.length > 0) {
       oldestLoadedMessageTimestamp = docs[0].data().timestamp;
       // Live window ini yang jadi bagian paling atas SELAMA belum ada
       // batch older yang dimuat -- begitu ada, oldestRenderedDateLabel
       // dikelola loadOlderMessages() saja, jangan ditimpa balik di sini.
-      if (!messagesOlderEl.firstElementChild) oldestRenderedDateLabel = firstDateLabel;
+      if (!messagesOlderEl.firstElementChild) oldestRenderedDateLabel = formatDateWIB(docs[0].data().timestamp);
     }
     if (docs.length < MESSAGES_PAGE_SIZE) allOlderMessagesLoaded = true;
 

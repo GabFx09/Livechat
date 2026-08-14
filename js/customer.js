@@ -364,14 +364,36 @@ function buildMessagesFragment(docs, precedingDateLabel) {
       fragment.appendChild(createDateDivider(dateLabel));
       lastDate = dateLabel;
     }
-    fragment.appendChild(renderMessage(m));
+    fragment.appendChild(renderMessage(m, docSnap.id));
   });
   return { fragment, firstDateLabel, lastDateLabel: lastDate };
 }
 
-function renderMessage(m) {
+// Tempel 1 bubble pesan baru di ujung bawah messagesLiveEl TANPA menyentuh
+// bubble lain -- dipakai listenMessages() (lihat catatan di sana) supaya 1
+// pesan baru masuk tidak memaksa SEMUA bubble di window (termasuk <img>
+// base64 yang bisa ratusan KB tiap gambar) ke-decode ulang oleh browser.
+// dataset.dateLabel (diisi renderMessage()) dipakai baca "tanggal terakhir
+// yang lagi tampil" langsung dari DOM, tanpa perlu state terpisah. Sama
+// persis dengan admin.js, disalin bukan di-share modul (lihat catatan di
+// buildMessagesFragment() soal kenapa).
+function appendLiveMessage(m, messageId) {
+  const dateLabel = formatDateWIB(m.timestamp);
+  const lastChild = messagesLiveEl.lastElementChild;
+  const lastDateLabel = !lastChild
+    ? null
+    : lastChild.classList.contains("date-divider")
+      ? lastChild.textContent
+      : lastChild.dataset.dateLabel;
+  if (dateLabel && dateLabel !== lastDateLabel) messagesLiveEl.appendChild(createDateDivider(dateLabel));
+  messagesLiveEl.appendChild(renderMessage(m, messageId));
+}
+
+function renderMessage(m, messageId) {
   const div = document.createElement("div");
   div.className = "message " + (m.sender === "customer" ? "mine" : "theirs");
+  div.dataset.messageId = messageId;
+  div.dataset.dateLabel = formatDateWIB(m.timestamp);
 
   const senderRow = document.createElement("div");
   senderRow.className = "sender-row";
@@ -653,13 +675,64 @@ function listenMessages() {
     // supaya header "sedang chat dengan siapa" tidak kosong tanpa alasan.
     if (!latestAdminInfo && knownAdminInfo) latestAdminInfo = knownAdminInfo;
 
-    const { fragment, firstDateLabel } = buildMessagesFragment(docs, olderBoundaryDateLabel);
-    messagesLiveEl.innerHTML = "";
-    messagesLiveEl.appendChild(fragment);
+    // Sama seperti admin.js: rebuild penuh tiap snapshot bikin lag di chat
+    // dengan riwayat panjang & banyak gambar (semua <img> base64 ke-decode
+    // ulang meski tidak berubah) -- tempel/copot 1 bubble saja buat kasus
+    // paling umum (1 pesan baru, kadang dibarengi 1 pesan lama kegeser
+    // keluar window). Selain itu (edit pesan, atau lagi baca histori lama)
+    // tetap rebuild penuh.
+    const changes = snap.docChanges();
+    const removedChange = changes.find((c) => c.type === "removed");
+    // "removed" bisa berarti pesan tertua kegeser keluar window (aman
+    // dipatch) ATAU admin hapus 1 pesan di TENGAH riwayat dari sisi admin
+    // (listener ini ikut kebagian event yang sama) -- kalau dipatch parsial
+    // padahal bukan yang tertua, divider tanggal bisa jadi yatim di tengah
+    // list. Aman cuma kalau bubble yang kehapus itu pesan tertua yang lagi
+    // tampil (elemen pertama, atau tepat sesudah divider tanggal).
+    const removedEl = removedChange
+      ? messagesLiveEl.querySelector(`[data-message-id="${CSS.escape(removedChange.doc.id)}"]`)
+      : null;
+    const removedIsOldest =
+      !removedChange ||
+      !removedEl ||
+      messagesLiveEl.firstElementChild === removedEl ||
+      (messagesLiveEl.firstElementChild &&
+        messagesLiveEl.firstElementChild.classList.contains("date-divider") &&
+        messagesLiveEl.firstElementChild.nextElementSibling === removedEl);
+    const canPatchIncrementally =
+      messagesLiveEl.childElementCount > 0 &&
+      messagesOlderEl.childElementCount === 0 &&
+      changes.length > 0 &&
+      changes.every((c) => c.type === "added" || c.type === "removed") &&
+      changes.filter((c) => c.type === "added").length <= 1 &&
+      changes.filter((c) => c.type === "removed").length <= 1 &&
+      removedIsOldest;
+
+    if (canPatchIncrementally) {
+      const prevOldestRenderedDateLabel = oldestRenderedDateLabel;
+      if (removedEl) removedEl.remove();
+      changes
+        .filter((c) => c.type === "added")
+        .forEach((c) => appendLiveMessage(c.doc.data(), c.doc.id));
+
+      const newOldestDateLabel = docs.length > 0 ? formatDateWIB(docs[0].data().timestamp) : null;
+      if (
+        messagesLiveEl.firstElementChild &&
+        messagesLiveEl.firstElementChild.classList.contains("date-divider") &&
+        messagesLiveEl.firstElementChild.textContent === prevOldestRenderedDateLabel &&
+        prevOldestRenderedDateLabel !== newOldestDateLabel
+      ) {
+        messagesLiveEl.firstElementChild.remove();
+      }
+    } else {
+      const { fragment } = buildMessagesFragment(docs, olderBoundaryDateLabel);
+      messagesLiveEl.innerHTML = "";
+      messagesLiveEl.appendChild(fragment);
+    }
 
     if (docs.length > 0) {
       oldestLoadedMessageTimestamp = docs[0].data().timestamp;
-      if (!messagesOlderEl.firstElementChild) oldestRenderedDateLabel = firstDateLabel;
+      if (!messagesOlderEl.firstElementChild) oldestRenderedDateLabel = formatDateWIB(docs[0].data().timestamp);
     }
     if (docs.length < MESSAGES_PAGE_SIZE) allOlderMessagesLoaded = true;
 

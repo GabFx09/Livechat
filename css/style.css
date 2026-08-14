@@ -810,6 +810,16 @@ button:not(:disabled):active {
   word-break: break-word;
 }
 
+.detail-value-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-value-row .detail-value {
+  flex: 1;
+}
+
 .archive-btn {
   margin-top: 8px;
   padding: 9px 12px;
