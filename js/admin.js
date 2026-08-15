@@ -88,6 +88,13 @@ const MESSAGES_PAGE_SIZE = 100;
 // lewat renderMessagesProgressively() supaya tidak nge-block first paint.
 const INITIAL_VISIBLE_MESSAGES = 20;
 let liveRenderToken = 0; // dicek deferred head-chunk renderMessagesProgressively() sebelum nempel, biar aman dari race kalau chat sudah diganti/di-render ulang duluan
+// Di-set true tepat sebelum admin kirim pesan sendiri (teks/gambar) -- kalau
+// admin lagi scroll ke atas baca histori lama terus kirim balasan baru,
+// balasannya sendiri harus tetap kelihatan (ikut discroll ke bawah) biarpun
+// posisi scroll saat itu jauh dari bawah. Beda dari cek wasNearBottom biasa
+// yang sengaja TIDAK menyeret admin ke bawah kalau pesan baru itu dari
+// customer (supaya tidak ganggu admin yang lagi baca histori).
+let forceScrollToBottomNext = false;
 let oldestLoadedMessageTimestamp = null; // cursor buat loadOlderMessages()
 let oldestRenderedDateLabel = null; // date-divider paling atas yg lagi tampil, buat cegah dobel di sambungan
 let olderBoundaryDateLabel = null; // tanggal pesan TERBARU dari batch older pertama yg dimuat (batas sama live window)
@@ -2143,6 +2150,7 @@ function openCustomer(uid, name) {
   olderBoundaryDateLabel = null;
   allOlderMessagesLoaded = false;
   loadingOlderMessages = false;
+  forceScrollToBottomNext = false;
 
   // messagesOlderEl/messagesLiveEl pakai display:contents (lihat CSS) --
   // jadi anak-anaknya (bubble pesan & date-divider) tetap kena layout flex
@@ -2172,6 +2180,8 @@ function openCustomer(uid, name) {
   unsubMessages = onSnapshot(q, (snap) => {
     const docs = snap.docs.slice().reverse();
     const wasNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+    const forceScrollToBottom = forceScrollToBottomNext;
+    forceScrollToBottomNext = false;
 
     // Rebuild penuh (innerHTML="" + render ulang SEMUA sampai 100 bubble)
     // tiap kali snapshot ini nembak -- termasuk buat 1 pesan baru doang --
@@ -2244,10 +2254,12 @@ function openCustomer(uid, name) {
     }
     if (docs.length < MESSAGES_PAGE_SIZE) allOlderMessagesLoaded = true;
 
-    // Cuma nempel ke bawah kalau admin memang lagi di dekat bawah -- kalau
-    // lagi scroll ke atas baca histori lama, jangan diseret paksa ke bawah
-    // tiap ada pesan baru masuk.
-    if (wasNearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    // Nempel ke bawah kalau admin memang lagi di dekat bawah (jangan
+    // diseret paksa tiap pesan CUSTOMER baru masuk kalau lagi scroll ke atas
+    // baca histori lama) -- ATAU kalau ini balasan admin sendiri yang baru
+    // saja dikirim (forceScrollToBottom), balasannya sendiri harus tetap
+    // kelihatan biarpun posisi scroll lagi jauh dari bawah.
+    if (wasNearBottom || forceScrollToBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
   });
 }
 
@@ -2373,6 +2385,7 @@ messageForm.addEventListener("submit", async (e) => {
   autoResizeMessageInput();
 
   try {
+    forceScrollToBottomNext = true;
     await writeMessage(activeCustomerUid, {
       sender: "admin",
       senderId: currentAdmin.uid,
@@ -2387,6 +2400,7 @@ messageForm.addEventListener("submit", async (e) => {
     bumpStat("messageCount");
     bumpStat("adminMessageCount");
   } catch (err) {
+    forceScrollToBottomNext = false;
     alert("Gagal mengirim balasan: " + err.message);
   }
 });
@@ -2425,6 +2439,7 @@ async function sendImageFile(file) {
   }
 
   try {
+    forceScrollToBottomNext = true;
     await writeMessage(targetUid, {
       sender: "admin",
       senderId: currentAdmin.uid,
@@ -2439,6 +2454,7 @@ async function sendImageFile(file) {
     bumpStat("messageCount");
     bumpStat("adminMessageCount");
   } catch (err) {
+    forceScrollToBottomNext = false;
     alert(err.message || "Gagal mengirim gambar.");
   }
 }

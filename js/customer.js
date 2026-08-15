@@ -112,6 +112,11 @@ const MESSAGES_PAGE_SIZE = 100;
 // lewat renderMessagesProgressively() supaya tidak nge-block first paint.
 const INITIAL_VISIBLE_MESSAGES = 20;
 let liveRenderToken = 0; // dicek deferred head-chunk renderMessagesProgressively() sebelum nempel, biar aman dari race kalau chat sudah di-render ulang duluan
+// Di-set true tepat sebelum customer kirim pesan sendiri (teks/gambar) --
+// kalau lagi scroll ke atas baca histori lama terus kirim pesan baru,
+// pesannya sendiri harus tetap kelihatan (ikut discroll ke bawah) biarpun
+// posisi scroll saat itu jauh dari bawah. Sama persis dengan admin.js.
+let forceScrollToBottomNext = false;
 let oldestLoadedMessageTimestamp = null; // cursor buat loadOlderMessages()
 let oldestRenderedDateLabel = null; // date-divider paling atas yg lagi tampil, buat cegah dobel di sambungan
 let olderBoundaryDateLabel = null; // tanggal pesan TERBARU dari batch older pertama yg dimuat (batas sama live window)
@@ -679,6 +684,7 @@ function listenMessages() {
   olderBoundaryDateLabel = null;
   allOlderMessagesLoaded = false;
   loadingOlderMessages = false;
+  forceScrollToBottomNext = false;
 
   // messagesOlderEl/messagesLiveEl pakai display:contents (lihat CSS) --
   // anak-anaknya tetap kena layout flex #messages persis kayak sebelum ada
@@ -707,6 +713,8 @@ function listenMessages() {
   unsubMessages = onSnapshot(q, (snap) => {
     const docs = snap.docs.slice().reverse();
     const wasNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+    const forceScrollToBottom = forceScrollToBottomNext;
+    forceScrollToBottomNext = false;
 
     let latestAdminInfo = null;
     docs.forEach((docSnap) => {
@@ -782,10 +790,12 @@ function listenMessages() {
       knownAdminInfo = latestAdminInfo;
       updateChatHeader();
     }
-    // Cuma nempel ke bawah kalau customer memang lagi di dekat bawah --
-    // kalau lagi scroll ke atas baca histori lama, jangan diseret paksa ke
-    // bawah tiap ada pesan baru masuk.
-    if (wasNearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    // Nempel ke bawah kalau customer memang lagi di dekat bawah (jangan
+    // diseret paksa tiap pesan ADMIN baru masuk kalau lagi scroll ke atas
+    // baca histori lama) -- ATAU kalau ini pesan sendiri yang baru saja
+    // dikirim (forceScrollToBottom), pesannya sendiri harus tetap kelihatan
+    // biarpun posisi scroll lagi jauh dari bawah.
+    if (wasNearBottom || forceScrollToBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
   });
 }
 
@@ -931,6 +941,7 @@ async function sendTextMessage(text) {
   if (!text || !currentUser || !sessionActive) return;
 
   try {
+    forceScrollToBottomNext = true;
     await writeMessage(currentUser.uid, {
       sender: "customer",
       type: "text",
@@ -938,6 +949,7 @@ async function sendTextMessage(text) {
       timestamp: serverTimestamp()
     });
   } catch (err) {
+    forceScrollToBottomNext = false;
     console.error("Gagal addDoc ke chats/" + currentUser.uid + "/messages:", err);
     alert("Gagal mengirim pesan (tulis chat): " + err.code + " - " + err.message);
     return;
@@ -1078,6 +1090,7 @@ async function sendImageFile(file) {
   if (!confirmed || !sessionActive) return;
 
   try {
+    forceScrollToBottomNext = true;
     await writeMessage(currentUser.uid, {
       sender: "customer",
       type: "image",
@@ -1088,6 +1101,7 @@ async function sendImageFile(file) {
     bumpStat("messageCount");
     bumpStat("customerMessageCount");
   } catch (err) {
+    forceScrollToBottomNext = false;
     alert(err.message || "Gagal mengirim gambar.");
   }
 }
