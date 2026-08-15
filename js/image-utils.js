@@ -47,6 +47,30 @@ export async function compressImageFile(
     }
   }
 
+  // Foto HP modern gampang 12-48MP -- drawImage(img,...) di bawah maksa
+  // browser decode PENUH resolusi asli dulu baru discale ke canvas kecil.
+  // Beberapa browser mobile (terutama Safari/iOS) diam-diam GAGAL menggambar
+  // isinya kalau sumbernya kegedean (limit memori canvas), tanpa melempar
+  // error -- hasilnya kanvas kosong (dulu kelihatan hitam solid sebelum ada
+  // fillRect putih di bawah, sekarang jadi putih solid, TAPI akar masalahnya
+  // -- decode gagal -- belum kesentuh oleh fillRect itu). createImageBitmap
+  // dengan resizeWidth/resizeHeight nyuruh browser decode LANGSUNG di
+  // resolusi kecil dari data terkompresi (bukan decode-penuh-baru-scale),
+  // jauh lebih hemat memori. Browser lama yang belum dukung ini otomatis
+  // jatuh balik ke source <img> penuh seperti sebelumnya (tidak ada regresi).
+  let source = img;
+  if (typeof createImageBitmap === "function") {
+    try {
+      source = await createImageBitmap(file, {
+        resizeWidth: width,
+        resizeHeight: height,
+        resizeQuality: "high"
+      });
+    } catch (err) {
+      source = img;
+    }
+  }
+
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -56,7 +80,8 @@ export async function compressImageFile(
   // digambar penuh) akan diekspor jadi hitam solid oleh toDataURL.
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(img, 0, 0, width, height);
+  ctx.drawImage(source, 0, 0, width, height);
+  if (source !== img && typeof source.close === "function") source.close();
 
   let quality = 0.85;
   let dataUrl = canvas.toDataURL(mimeType, quality);
