@@ -1,3 +1,21 @@
+// Sampling grid piksel, bukan scan penuh, supaya tidak lambat di gambar
+// besar -- 12x12 titik cukup buat mendeteksi "kanvas cuma fillRect putih,
+// drawImage tidak menggambar apa-apa" karena foto asli nyaris mustahil
+// 100% putih rata persis di semua titik sampel itu sekaligus.
+function isCanvasBlank(ctx, width, height) {
+  const cols = 12;
+  const rows = 12;
+  for (let row = 0; row < rows; row++) {
+    const y = Math.min(height - 1, Math.floor(((row + 0.5) * height) / rows));
+    for (let col = 0; col < cols; col++) {
+      const x = Math.min(width - 1, Math.floor(((col + 0.5) * width) / cols));
+      const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+      if (r !== 255 || g !== 255 || b !== 255) return false;
+    }
+  }
+  return true;
+}
+
 function loadImageFile(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -33,55 +51,97 @@ export async function compressImageFile(
     );
   }
 
-  const img = await loadImageFile(file);
-  let width = img.naturalWidth;
-  let height = img.naturalHeight;
-
-  if (width > maxDimension || height > maxDimension) {
-    if (width >= height) {
-      height = Math.round((height * maxDimension) / width);
-      width = maxDimension;
-    } else {
-      width = Math.round((width * maxDimension) / height);
-      height = maxDimension;
-    }
-  }
-
-  // Foto HP modern gampang 12-48MP -- drawImage(img,...) di bawah maksa
-  // browser decode PENUH resolusi asli dulu baru discale ke canvas kecil.
-  // Beberapa browser mobile (terutama Safari/iOS) diam-diam GAGAL menggambar
-  // isinya kalau sumbernya kegedean (limit memori canvas), tanpa melempar
-  // error -- hasilnya kanvas kosong (dulu kelihatan hitam solid sebelum ada
-  // fillRect putih di bawah, sekarang jadi putih solid, TAPI akar masalahnya
-  // -- decode gagal -- belum kesentuh oleh fillRect itu). createImageBitmap
-  // dengan resizeWidth/resizeHeight nyuruh browser decode LANGSUNG di
-  // resolusi kecil dari data terkompresi (bukan decode-penuh-baru-scale),
-  // jauh lebih hemat memori. Browser lama yang belum dukung ini otomatis
-  // jatuh balik ke source <img> penuh seperti sebelumnya (tidak ada regresi).
-  let source = img;
-  if (typeof createImageBitmap === "function") {
-    try {
-      source = await createImageBitmap(file, {
-        resizeWidth: width,
-        resizeHeight: height,
-        resizeQuality: "high"
-      });
-    } catch (err) {
-      source = img;
-    }
-  }
+  // img.onload bisa saja tetap terpanggil dengan naturalWidth/Height 0 kalau
+  // filenya rusak/format aneh (bukan selalu img.onerror) -- baseW/baseH 0
+  // berarti <img> ini tidak bisa dipakai sebagai sumber gambar sama sekali,
+  // lanjut ke rung-loop di bawah dilewati, langsung ke fallback mentah.
+  const img = await loadImageFile(file).catch(() => null);
+  const baseW = img?.naturalWidth || 0;
+  const baseH = img?.naturalHeight || 0;
 
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
   const ctx = canvas.getContext("2d");
-  // Isi latar putih dulu -- JPEG tidak punya kanal alpha, jadi tanpa ini
-  // area transparan (PNG berlatar transparan, atau gambar yang gagal
-  // digambar penuh) akan diekspor jadi hitam solid oleh toDataURL.
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(source, 0, 0, width, height);
-  if (source !== img && typeof source.close === "function") source.close();
+
+  function dimsForTarget(target) {
+    if (baseW <= target && baseH <= target) return { width: baseW, height: baseH };
+    if (baseW >= baseH) {
+      return { width: target, height: Math.round((baseH * target) / baseW) };
+    }
+    return { height: target, width: Math.round((baseW * target) / baseH) };
+  }
+
+  function drawAndCheck(src, width, height) {
+    canvas.width = width;
+    canvas.height = height;
+    // Isi latar putih dulu -- JPEG tidak punya kanal alpha, jadi tanpa ini
+    // area transparan (PNG berlatar transparan, atau gambar yang gagal
+    // digambar penuh) akan diekspor jadi hitam solid oleh toDataURL.
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(src, 0, 0, width, height);
+    return !isCanvasBlank(ctx, width, height);
+  }
+
+  // Foto HP modern gampang 12-48MP -- decode+drawImage di resolusi besar
+  // kadang diam-diam GAGAL menggambar isinya di browser/WebView mobile
+  // tertentu (limit memori decode), tanpa melempar error -- hasilnya kanvas
+  // kosong/putih yang dulu malah ikut terkirim ke chat. Daripada menolak
+  // kirim (customer HARUS bisa kirim gambar apa pun, seperti WhatsApp),
+  // di sini dicoba turun bertahap ke resolusi target yang lebih kecil --
+  // makin kecil target decode-nya, makin kecil juga kebutuhan memorinya,
+  // jadi jauh lebih mungkin berhasil -- sambil tetap dicoba dua jalur
+  // decode di tiap ukuran (createImageBitmap resize dulu karena paling
+  // hemat memori, baru <img>+canvas biasa sebagai cadangan).
+  const rungs = [...new Set([maxDimension, 800, 500, 300, 150])]
+    .filter((d) => d <= maxDimension)
+    .sort((a, b) => b - a);
+
+  let width, height, drawn = false;
+  if (baseW && baseH) {
+    for (const target of rungs) {
+      const dims = dimsForTarget(target);
+      if (typeof createImageBitmap === "function") {
+        try {
+          const bitmap = await createImageBitmap(file, {
+            resizeWidth: dims.width,
+            resizeHeight: dims.height,
+            resizeQuality: "high"
+          });
+          const ok = drawAndCheck(bitmap, dims.width, dims.height);
+          if (typeof bitmap.close === "function") bitmap.close();
+          if (ok) {
+            width = dims.width;
+            height = dims.height;
+            drawn = true;
+            break;
+          }
+        } catch (err) {
+          // lanjut coba jalur <img> di bawah untuk ukuran target yang sama
+        }
+      }
+      if (drawAndCheck(img, dims.width, dims.height)) {
+        width = dims.width;
+        height = dims.height;
+        drawn = true;
+        break;
+      }
+    }
+  }
+
+  if (!drawn) {
+    // Upaya terakhir: semua ukuran & jalur decode gagal (atau <img> sama
+    // sekali tidak bisa dipakai) -- daripada gagal terkirim, kirim file
+    // ASLINYA apa adanya tanpa resize/kompresi kanvas sama sekali (murni
+    // baca-bytes lewat FileReader, tidak lewat decode gambar jadi tidak
+    // kena masalah yang sama). Cuma bisa gagal kalau file mentahnya juga
+    // melebihi batas ukuran field Firestore -- satu-satunya kasus yang
+    // masih bisa tidak terkirim, seharusnya sangat jarang.
+    const rawDataUrl = await fileToDataUrl(file);
+    if (rawDataUrl.length <= maxDataUrlLength) {
+      return rawDataUrl;
+    }
+    throw new Error("Gambar terlalu besar dan gagal diproses. Coba kirim gambar lain yang lebih kecil.");
+  }
 
   let quality = 0.85;
   let dataUrl = canvas.toDataURL(mimeType, quality);
