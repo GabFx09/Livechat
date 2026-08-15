@@ -79,6 +79,15 @@ let unsubMessages = null;
 // pesan terbaru yang di-live-listen; pesan lebih lama dimuat sesuai
 // kebutuhan (scroll ke atas) lewat loadOlderMessages(), lihat openCustomer().
 const MESSAGES_PAGE_SIZE = 100;
+// Full-rebuild (buka chat baru, atau edit/hapus pesan tengah histori) yang
+// langsung nge-render semua MESSAGES_PAGE_SIZE bubble sekaligus secara
+// sinkron bisa makan 1-2 detik di riwayat panjang & banyak gambar base64 --
+// selama itu browser tidak sempat menggambar apa pun (layar kelihatan hitam
+// kosong sesaat). Cuma INITIAL_VISIBLE_MESSAGES pesan terbaru yang dirender
+// sinkron (langsung muncul cepat), sisanya menyusul di frame berikutnya
+// lewat renderMessagesProgressively() supaya tidak nge-block first paint.
+const INITIAL_VISIBLE_MESSAGES = 20;
+let liveRenderToken = 0; // dicek deferred head-chunk renderMessagesProgressively() sebelum nempel, biar aman dari race kalau chat sudah diganti/di-render ulang duluan
 let oldestLoadedMessageTimestamp = null; // cursor buat loadOlderMessages()
 let oldestRenderedDateLabel = null; // date-divider paling atas yg lagi tampil, buat cegah dobel di sambungan
 let olderBoundaryDateLabel = null; // tanggal pesan TERBARU dari batch older pertama yg dimuat (batas sama live window)
@@ -1902,6 +1911,46 @@ function buildMessagesFragment(docs, precedingDateLabel) {
   return { fragment, firstDateLabel, lastDateLabel: lastDate };
 }
 
+// Full-rebuild messagesLiveEl tanpa nge-block first paint (lihat catatan di
+// INITIAL_VISIBLE_MESSAGES) -- pecah docs (ascending) jadi 2: "tail" (paling
+// baru, INITIAL_VISIBLE_MESSAGES pesan) langsung dirender sinkron karena itu
+// yang memang jadi fokus begitu chat dibuka, "head" (sisanya, lebih lama)
+// dirender di frame browser berikutnya lalu ditempel di ATAS tanpa bikin
+// scroll "loncat" (teknik sama seperti loadOlderMessages()).
+function renderMessagesProgressively(docs, precedingDateLabel) {
+  const token = ++liveRenderToken;
+  const targetLiveEl = messagesLiveEl;
+  targetLiveEl.innerHTML = "";
+
+  const hasHead = docs.length > INITIAL_VISIBLE_MESSAGES;
+  const tailDocs = hasHead ? docs.slice(-INITIAL_VISIBLE_MESSAGES) : docs;
+  const headDocs = hasHead ? docs.slice(0, docs.length - INITIAL_VISIBLE_MESSAGES) : [];
+
+  // Preceding label buat tail = tanggal pesan terakhir di head (kalau ada),
+  // supaya divider tanggal di sambungan head/tail tidak dobel -- kalau tidak
+  // ada head, ya precedingDateLabel asli yang dipakai (sama seperti perilaku
+  // sebelum ada progressive-render ini).
+  const headLastDateLabel = headDocs.length
+    ? formatDateWIB(headDocs[headDocs.length - 1].data().timestamp)
+    : precedingDateLabel;
+  const { fragment: tailFragment } = buildMessagesFragment(tailDocs, headLastDateLabel);
+  targetLiveEl.appendChild(tailFragment);
+
+  if (!hasHead) return;
+
+  requestAnimationFrame(() => {
+    // Chat sudah diganti atau ada full-rebuild lain yang menyusul duluan
+    // sebelum frame ini sempat jalan -- buang hasilnya, jangan sentuh
+    // messagesLiveEl yang sekarang (bukan punya render pass ini lagi).
+    if (token !== liveRenderToken || targetLiveEl !== messagesLiveEl) return;
+    const { fragment: headFragment } = buildMessagesFragment(headDocs, precedingDateLabel);
+    const prevScrollHeight = messagesEl.scrollHeight;
+    const prevScrollTop = messagesEl.scrollTop;
+    targetLiveEl.prepend(headFragment);
+    messagesEl.scrollTop = messagesEl.scrollHeight - prevScrollHeight + prevScrollTop;
+  });
+}
+
 function renderMessage(m, messageId) {
   const div = document.createElement("div");
   div.className = "message " + (m.sender === "admin" ? "mine" : "theirs");
@@ -2183,9 +2232,7 @@ function openCustomer(uid, name) {
         messagesLiveEl.firstElementChild.remove();
       }
     } else {
-      const { fragment } = buildMessagesFragment(docs, olderBoundaryDateLabel);
-      messagesLiveEl.innerHTML = "";
-      messagesLiveEl.appendChild(fragment);
+      renderMessagesProgressively(docs, olderBoundaryDateLabel);
     }
 
     if (docs.length > 0) {
