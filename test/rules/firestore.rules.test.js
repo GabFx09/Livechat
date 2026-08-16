@@ -195,31 +195,53 @@ test("chats: pesan teks customer ditolak kalau lebih dari 4000 karakter", async 
   );
 });
 
-test("chats: anti-spam menolak pesan customer < 500ms sejak pesan sebelumnya", async () => {
+test("chats: anti-spam menolak pesan ke-6 dalam ledakan (burst) < 3 detik", async () => {
   await seed(["workspaces", WS, "customers", CUSTOMER], {
     name: "Budi",
-    lastMessageAt: Timestamp.now()
+    burstWindowStart: Timestamp.now(),
+    burstCount: 5
   });
   const db = asCustomer();
   await assertFails(
     addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
       sender: "customer",
       type: "text",
-      text: "spam cepat",
+      text: "spam beruntun",
       timestamp: Timestamp.now()
     })
   );
 });
 
-test("chats: pesan customer LOLOS kalau sudah lebih dari 500ms sejak pesan sebelumnya", async () => {
-  const past = Timestamp.fromMillis(Date.now() - 2000);
-  await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi", lastMessageAt: past });
+test("chats: pesan customer LOLOS kalau burst count masih di bawah limit", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    burstWindowStart: Timestamp.now(),
+    burstCount: 4
+  });
   const db = asCustomer();
   await assertSucceeds(
     addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
       sender: "customer",
       type: "text",
-      text: "pesan wajar",
+      text: "teks lalu foto beruntun cepat -- wajar",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("chats: pesan customer LOLOS kalau window burst sebelumnya sudah lewat 3 detik", async () => {
+  const past = Timestamp.fromMillis(Date.now() - 4000);
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    burstWindowStart: past,
+    burstCount: 5
+  });
+  const db = asCustomer();
+  await assertSucceeds(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "pesan wajar setelah jeda",
       timestamp: Timestamp.now()
     })
   );

@@ -120,25 +120,26 @@ service cloud.firestore {
       }
 
       // Anti-spam ringan buat pesan customer (lihat pemakaiannya di
-      // chats/{customerId}/messages di bawah): tolak kalau belum 500ms
-      // sejak pesan sebelumnya dari customer yg sama. Tidak kerasa buat
-      // orang beneran yg ngetik manual, tapi cukup nahan script yg nembak
-      // banyak pesan per detik.
+      // chats/{customerId}/messages di bawah). DULU: tolak kalau belum 500ms
+      // sejak pesan customer sebelumnya (jeda kaku antar-pesan) -- ternyata
+      // juga nolak pola wajar manusia yg kirim beberapa pesan beruntun cepat
+      // (mis. ketik teks lalu langsung tempel/kirim gambar dalam <500ms),
+      // dilaporkan customer sebagai "gagal kirim gambar" padahal cuma
+      // menyusul cepat pesan sebelumnya, bukan spam.
       //
-      // PENTING: cek lastCustomerMessageAt (cuma di-update customer.js pas
-      // CUSTOMER sendiri yang kirim pesan), BUKAN lastMessageAt -- field itu
-      // dulu dipakai di sini, tapi ternyata ikut ter-update tiap ADMIN
-      // membalas ATAU bot ngirim balasan otomatis juga (lihat
-      // touchCustomerDoc() di admin.js & writeMessage() di customer.js).
-      // Akibatnya kalau customer kebetulan kirim pesan dalam 500ms setelah
-      // admin/bot ngirim sesuatu, pesannya ditolak permission-denied padahal
-      // customer sama sekali tidak spam -- bug nyata, bukan cuma teoretis
-      // (dilaporkan customer sebagai "kadang-kadang gagal kirim pesan").
+      // SEKARANG: gaya WhatsApp -- yang dibatasi cuma LEDAKAN (burst), bukan
+      // jarak antar 2 pesan. Tolak kalau customer sudah kirim >= 5 pesan
+      // dalam 3 detik terakhir. burstWindowStart/burstCount dihitung & ditulis
+      // customer.js (touchCustomerDoc, cuma pas CUSTOMER sendiri yang kirim
+      // pesan) SESUDAH tiap pesan sukses terkirim -- rule ini cuma BACA nilai
+      // yg sudah ada dari sebelum pesan SEKARANG ditulis, jadi tidak ada
+      // celah client menaikkan limit pesan yg sedang dievaluasi ini sendiri.
       function customerNotSpamming(customerId) {
         let cust = get(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId));
-        return !('lastCustomerMessageAt' in cust.data) ||
-          cust.data.lastCustomerMessageAt == null ||
-          request.time > cust.data.lastCustomerMessageAt + duration.value(500, 'ms');
+        return !('burstWindowStart' in cust.data) ||
+          cust.data.burstWindowStart == null ||
+          request.time > cust.data.burstWindowStart + duration.value(3, 's') ||
+          cust.data.burstCount < 5;
       }
 
       allow update: if isWorkspaceOperator() &&

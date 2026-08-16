@@ -855,6 +855,27 @@ messagesEl.addEventListener("scroll", () => {
   if (messagesEl.scrollTop < 60) loadOlderMessages();
 });
 
+// Anti-spam ringan gaya WhatsApp (lihat penjelasan lengkap di firestore.rules
+// customerNotSpamming()): yang dibatasi cuma LEDAKAN (>=5 pesan customer
+// dalam 3 detik), bukan jeda kaku antar-pesan. Dilacak di memory (bukan baca
+// balik dokumen Firestore tiap kirim) karena instance ini satu-satunya yang
+// nulis field ini buat customer yang bersangkutan dalam sesi ybs.
+const BURST_WINDOW_MS = 3000;
+let burstWindowStartMs = 0;
+let burstCount = 0;
+
+function nextBurstFields() {
+  const now = Date.now();
+  const isNewWindow = now - burstWindowStartMs > BURST_WINDOW_MS;
+  if (isNewWindow) {
+    burstWindowStartMs = now;
+    burstCount = 1;
+    return { burstWindowStart: serverTimestamp(), burstCount: 1 };
+  }
+  burstCount++;
+  return { burstCount };
+}
+
 async function touchCustomerDoc(lastMessage) {
   await setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
@@ -862,19 +883,13 @@ async function touchCustomerDoc(lastMessage) {
       name: currentUser.name,
       lastMessage,
       lastMessageAt: serverTimestamp(),
-      // Field TERPISAH dari lastMessageAt di atas -- ini cuma disentuh di
-      // sini (pas customer BENERAN kirim pesan), dipakai firestore.rules'
-      // customerNotSpamming() buat anti-spam. lastMessageAt sendiri ikut
-      // ke-update tiap admin/bot ngirim juga, jadi gak bisa dipakai buat
-      // anti-spam customer tanpa salah nolak pesan yang kebetulan nyusul
-      // cepat setelah balasan admin/bot (lihat catatan di firestore.rules).
-      lastCustomerMessageAt: serverTimestamp(),
       lastSender: "customer",
       unreadCount: increment(1),
       archived: false,
       archivedAt: null,
       expireAt: null,
-      typingDraft: null
+      typingDraft: null,
+      ...nextBurstFields()
     },
     { merge: true }
   );
