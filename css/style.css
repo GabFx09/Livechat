@@ -141,6 +141,25 @@ button:not(:disabled):active {
   padding: 4px 0;
 }
 
+/* Placeholder while waiting for the first onSnapshot payload on chat open --
+   without this, #messages sits empty (and dark) for however long that
+   network round-trip takes, which reads as the chat "going dark" before
+   showing anything. */
+.messages-loading-initial {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  animation: loading-initial-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-initial-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
 .customer-list-loading-older {
   list-style: none;
   text-align: center;

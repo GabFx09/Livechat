@@ -2167,6 +2167,19 @@ function openCustomer(uid, name) {
   messagesEl.appendChild(messagesOlderEl);
   messagesEl.appendChild(messagesLiveEl);
 
+  // onSnapshot() di bawah baru dapat data pertama setelah round-trip ke
+  // server (belum ada persistence lokal) -- tanpa placeholder ini #messages
+  // kosong total (bukan cuma ::after ikon 💬 punya .messages:empty, karena 3
+  // wrapper di atas bikin elemen ini technically tidak :empty) selama itu,
+  // kelihatan kayak "chat-nya gelap dulu". Dibuang otomatis begitu snapshot
+  // pertama datang, entah lewat rebuild penuh (targetLiveEl.innerHTML="" di
+  // renderMessagesProgressively) atau langsung di-remove kalau lagi kepatch
+  // incremental (harusnya tidak pernah kejadian di open pertama).
+  const messagesLoadingInitialEl = document.createElement("div");
+  messagesLoadingInitialEl.className = "messages-loading-initial";
+  messagesLoadingInitialEl.textContent = "Memuat percakapan...";
+  messagesEl.appendChild(messagesLoadingInitialEl);
+
   // Cuma MESSAGES_PAGE_SIZE pesan terbaru yang live -- chat lama dengan
   // ribuan pesan dulu di-load & di-render SEMUA sekaligus tiap dibuka,
   // makin lama makin berat. Pesan yang lebih lama dimuat sesuai kebutuhan
@@ -2178,6 +2191,8 @@ function openCustomer(uid, name) {
     limit(MESSAGES_PAGE_SIZE)
   );
   unsubMessages = onSnapshot(q, (snap) => {
+    if (messagesLoadingInitialEl.isConnected) messagesLoadingInitialEl.remove();
+
     const docs = snap.docs.slice().reverse();
     const wasNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
     const forceScrollToBottom = forceScrollToBottomNext;

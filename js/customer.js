@@ -701,6 +701,17 @@ function listenMessages() {
   messagesEl.appendChild(messagesOlderEl);
   messagesEl.appendChild(messagesLiveEl);
 
+  // Sama seperti admin.js: onSnapshot() di bawah baru dapat data pertama
+  // setelah round-trip ke server -- tanpa placeholder ini #messages kosong
+  // total selama itu (bukan cuma ikon 💬 punya .messages:empty, karena 3
+  // wrapper di atas bikin elemen ini technically tidak :empty), kelihatan
+  // kayak "chat-nya gelap dulu". Dibuang otomatis begitu snapshot pertama
+  // datang.
+  const messagesLoadingInitialEl = document.createElement("div");
+  messagesLoadingInitialEl.className = "messages-loading-initial";
+  messagesLoadingInitialEl.textContent = "Memuat percakapan...";
+  messagesEl.appendChild(messagesLoadingInitialEl);
+
   // Cuma MESSAGES_PAGE_SIZE pesan terbaru yang live -- langganan lama
   // dengan ribuan pesan dulu di-load & di-render SEMUA sekaligus tiap
   // dibuka/refresh, makin lama makin berat. Pesan lebih lama dimuat sesuai
@@ -711,6 +722,8 @@ function listenMessages() {
     limit(MESSAGES_PAGE_SIZE)
   );
   unsubMessages = onSnapshot(q, (snap) => {
+    if (messagesLoadingInitialEl.isConnected) messagesLoadingInitialEl.remove();
+
     const docs = snap.docs.slice().reverse();
     const wasNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
     const forceScrollToBottom = forceScrollToBottomNext;
