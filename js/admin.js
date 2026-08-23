@@ -126,11 +126,11 @@ let customersInitialLoadDone = false;
 let customersDataMap = new Map();
 // Sama seperti pesan (lihat MESSAGES_PAGE_SIZE) -- dulu listenCustomers()
 // live-listen ke 300 customer sekaligus. Sekarang cuma CUSTOMERS_PAGE_SIZE
-// (100) paling baru yang live; sisanya dimuat sesuai kebutuhan (scroll ke
+// paling baru yang live; sisanya dimuat sesuai kebutuhan (scroll ke
 // bawah di sidebar) lewat loadOlderCustomers(), TIDAK live (data customer
 // lama jarang berubah -- kalau berubah dia otomatis "naik" masuk balik ke
 // live window lewat listenCustomers() lain kali).
-const CUSTOMERS_PAGE_SIZE = 100;
+const CUSTOMERS_PAGE_SIZE = 40;
 let liveCustomerUids = new Set(); // uid yg lagi di live window (snapshot listenCustomers() saat ini)
 let liveCustomerOrder = []; // urutan live window, dari snapshot terbaru
 let olderCustomerUids = []; // uid hasil loadOlderCustomers(), urutan append (selalu setelah live)
@@ -1140,7 +1140,7 @@ async function toggleArchive(uid, archived) {
 // dipasang (login/buka dashboard) biayanya = 1 baca Firestore x SELURUH
 // histori customer yang pernah ada (termasuk yang sudah diarsipkan sampai
 // 1 tahun) -- makin lama dipakai makin berat. Diurutkan lastMessageAt
-// desc, jadi 100 slot ini otomatis "self-sorting": percakapan yang
+// desc, jadi CUSTOMERS_PAGE_SIZE slot ini otomatis "self-sorting": percakapan yang
 // beneran masih aktif selalu naik ke atas tiap ada pesan baru, hampir
 // mustahil ke-geser keluar; yang ke-geser cuma yang memang sudah lama
 // tidak disentuh -- dan itu tetap bisa dilihat kok, lewat
