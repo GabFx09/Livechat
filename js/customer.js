@@ -102,7 +102,7 @@ let presenceIntervalId = null;
 // refresh chat makin lama makin berat. Cuma MESSAGES_PAGE_SIZE pesan terbaru
 // yang live; lebih lama dimuat sesuai kebutuhan (scroll ke atas) lewat
 // loadOlderMessages(), lihat listenMessages().
-const MESSAGES_PAGE_SIZE = 100;
+const MESSAGES_PAGE_SIZE = 40;
 // Full-rebuild (buka chat baru, atau edit/hapus pesan tengah histori) yang
 // langsung nge-render semua MESSAGES_PAGE_SIZE bubble sekaligus secara
 // sinkron bisa makan 1-2 detik di riwayat panjang & banyak gambar base64 --
@@ -734,7 +734,7 @@ function listenMessages() {
       const m = docSnap.data();
       if (m.sender === "admin") latestAdminInfo = { name: m.senderName, photo: m.senderPhoto };
     });
-    // Jarang, tapi mungkin: 100 pesan terbaru semuanya dari customer sendiri
+    // Jarang, tapi mungkin: MESSAGES_PAGE_SIZE pesan terbaru semuanya dari customer sendiri
     // (belum dibalas admin sama sekali dalam rentang itu) -- coba cari lagi
     // di batch pesan lama yang sudah dimuat lewat loadOlderMessages(),
     // supaya header "sedang chat dengan siapa" tidak kosong tanpa alasan.

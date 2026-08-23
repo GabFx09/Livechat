@@ -78,7 +78,7 @@ let unsubMessages = null;
 // (Firestore read cost + waktu render DOM). Sekarang cuma MESSAGES_PAGE_SIZE
 // pesan terbaru yang di-live-listen; pesan lebih lama dimuat sesuai
 // kebutuhan (scroll ke atas) lewat loadOlderMessages(), lihat openCustomer().
-const MESSAGES_PAGE_SIZE = 100;
+const MESSAGES_PAGE_SIZE = 40;
 // Full-rebuild (buka chat baru, atau edit/hapus pesan tengah histori) yang
 // langsung nge-render semua MESSAGES_PAGE_SIZE bubble sekaligus secara
 // sinkron bisa makan 1-2 detik di riwayat panjang & banyak gambar base64 --
@@ -2198,20 +2198,20 @@ function openCustomer(uid, name) {
     const forceScrollToBottom = forceScrollToBottomNext;
     forceScrollToBottomNext = false;
 
-    // Rebuild penuh (innerHTML="" + render ulang SEMUA sampai 100 bubble)
-    // tiap kali snapshot ini nembak -- termasuk buat 1 pesan baru doang --
+    // Rebuild penuh (innerHTML="" + render ulang SEMUA sampai MESSAGES_PAGE_SIZE
+    // bubble) tiap kali snapshot ini nembak -- termasuk buat 1 pesan baru doang --
     // kerasa lambat di chat yang riwayatnya panjang & banyak gambar (base64
     // langsung di dokumen, bisa ratusan KB/gambar): SEMUA <img> di window
     // ke-decode ulang biarpun tidak berubah. Kasus paling umum (customer
     // kirim 1 pesan baru, kadang dibarengi 1 pesan lama kegeser keluar
-    // window karena limit(100)) ditangani lewat tempel/copot 1 bubble saja.
+    // window karena limit(MESSAGES_PAGE_SIZE)) ditangani lewat tempel/copot 1 bubble saja.
     // Selain kasus itu (edit/hapus pesan, atau messagesOlderEl sudah terisi
     // -- lagi baca histori lama, jangan senggol seam-nya) tetap jatuh balik
     // ke rebuild penuh, sudah teruji dan jarang kepakai jadi risikonya kecil.
     const changes = snap.docChanges();
     const removedChange = changes.find((c) => c.type === "removed");
     // "removed" bisa berarti 2 hal: pesan tertua kegeser keluar window
-    // (limit(100), aman ditempel/copot) ATAU admin beneran hapus 1 pesan di
+    // (limit(MESSAGES_PAGE_SIZE), aman ditempel/copot) ATAU admin beneran hapus 1 pesan di
     // TENGAH riwayat (kalau dipatch parsial, divider tanggalnya bisa jadi
     // yatim di tengah list -- cuma cek elemen pertama, tidak ke-cover).
     // Bedakan dengan cek posisi: aman cuma kalau bubble yang kehapus itu
