@@ -6,6 +6,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   setDoc,
   getDoc,
@@ -44,7 +46,16 @@ const auth = getAuth(app);
 // operator seluler, proxy) memblokir koneksi streaming (WebChannel) bawaan
 // Firestore tanpa error yang jelas -- ini bikin SDK otomatis pindah ke
 // long-polling biasa kalau streaming tidak jalan, tanpa perlu deteksi manual.
-const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+// localCache: riwayat chat yang pernah dimuat di browser ini kesimpan di
+// IndexedDB, jadi buka ulang/refresh halaman chat yang sama bisa langsung
+// tampil dari cache sambil sync di belakang, bukan nunggu round-trip network
+// lagi dari nol. Multi tab manager buat jaga-jaga customer buka >1 tab --
+// kalau IndexedDB/persistence tidak didukung browser-nya, otomatis fallback
+// ke cache di-memori biasa (tidak crash).
+const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 // Presence (online/offline) lewat Realtime Database, bukan Firestore --
 // lihat catatan lengkap di startPresence() di bawah. rtdb null kalau
 // databaseURL belum di-setup di firebase-config.js, supaya tetap jalan

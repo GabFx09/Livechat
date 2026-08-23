@@ -7,6 +7,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDoc,
   getDocs,
@@ -52,8 +54,17 @@ import { formatDurationShort } from "./format-utils.js";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 // Lihat catatan di customer.js: hindari koneksi streaming Firestore yang
-// bisa diblokir diam-diam di beberapa jaringan.
-const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+// bisa diblokir diam-diam di beberapa jaringan. localCache: chat yang pernah
+// dibuka di browser ini kesimpan di IndexedDB, jadi buka ulang customer yang
+// sama (admin gonta-ganti sidebar) bisa langsung tampil dari cache sambil
+// sync di belakang, bukan nunggu round-trip network lagi tiap kali. Multi
+// tab manager karena admin realistis bisa buka >1 tab dashboard sekaligus --
+// kalau IndexedDB/persistence tidak didukung browser-nya, otomatis fallback
+// ke cache di-memori biasa (tidak crash).
+const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 // Presence (online/offline) dibaca dari Realtime Database (lihat catatan di
 // customer.js) kalau sudah di-setup, fallback ke lastActiveAt Firestore lama
 // kalau belum (rtdb null).
