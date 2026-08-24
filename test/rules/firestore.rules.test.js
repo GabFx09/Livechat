@@ -12,12 +12,13 @@ import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, Timestamp } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, collection, Timestamp } from "firebase/firestore";
 
 const WS = "ws-test";
 const OTHER_WS = "ws-other";
 const ADMIN = "admin-1";
 const OTHER_ADMIN = "admin-2";
+const SUPERADMIN = "admin-super";
 const CUSTOMER = "cust-1";
 const OTHER_CUSTOMER = "cust-2";
 
@@ -52,6 +53,7 @@ beforeEach(async () => {
       autoGreetingOptionReplies: OPTION_REPLIES
     });
     await setDoc(doc(db, "workspaces", WS, "admins", ADMIN), { name: "Admin Satu" });
+    await setDoc(doc(db, "workspaces", WS, "admins", SUPERADMIN), { name: "Owner", role: "superadmin" });
     await setDoc(doc(db, "workspaces", OTHER_WS), { name: "Toko Lain" });
     await setDoc(doc(db, "workspaces", OTHER_WS, "admins", OTHER_ADMIN), { name: "Admin Lain" });
   });
@@ -62,6 +64,9 @@ function asCustomer(uid = CUSTOMER) {
 }
 function asAdmin(uid = ADMIN) {
   return testEnv.authenticatedContext(uid).firestore();
+}
+function asSuperadmin() {
+  return testEnv.authenticatedContext(SUPERADMIN).firestore();
 }
 function asAnon() {
   return testEnv.unauthenticatedContext().firestore();
@@ -507,4 +512,96 @@ test("stats: cuma admin yang boleh baca, customer tidak boleh", async () => {
   await seed(["workspaces", WS, "stats", "2024-01-01"], { messageCount: 1 });
   await assertFails(getDoc(doc(asCustomer(), "workspaces", WS, "stats", "2024-01-01")));
   await assertSucceeds(getDoc(doc(asAdmin(), "workspaces", WS, "stats", "2024-01-01")));
+});
+
+// --- superadmin vs operator: superadmin cuma boleh lihat+ekspor ---
+// (lihat isWorkspaceOperator() di firestore.rules -- role "superadmin" wajib
+// gagal di semua operasi tulis yang mengubah percakapan/pengaturan, dan
+// tetap berhasil di semua operasi baca + edit profil sendiri)
+
+test("superadmin: TIDAK bisa ubah Pengaturan workspace (Appearance/Auto-Chat/Jam Operasional)", async () => {
+  await assertFails(
+    setDoc(doc(asSuperadmin(), "workspaces", WS), { brandName: "Diganti Paksa" }, { merge: true })
+  );
+});
+
+test("superadmin: TIDAK bisa kirim balasan (pesan admin) ke customer", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi" });
+  await assertFails(
+    addDoc(collection(asSuperadmin(), "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "admin",
+      senderId: SUPERADMIN,
+      type: "text",
+      text: "halo",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("superadmin: TIDAK bisa hapus pesan", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi" });
+  let msgRef;
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    msgRef = await addDoc(collection(ctx.firestore(), "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "mau dihapus",
+      timestamp: Timestamp.now()
+    });
+  });
+  await assertFails(
+    deleteDoc(doc(asSuperadmin(), "workspaces", WS, "chats", CUSTOMER, "messages", msgRef.id))
+  );
+});
+
+test("superadmin: TIDAK bisa hapus customer (fitur Hapus Semua Chat)", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi" });
+  await assertFails(deleteDoc(doc(asSuperadmin(), "workspaces", WS, "customers", CUSTOMER)));
+});
+
+test("superadmin: TIDAK bisa bikin deletionLogs (efek dari Hapus Semua Chat)", async () => {
+  await assertFails(
+    addDoc(collection(asSuperadmin(), "workspaces", WS, "deletionLogs"), {
+      deletedBy: SUPERADMIN,
+      customerId: CUSTOMER,
+      deletedAt: Timestamp.now()
+    })
+  );
+});
+
+test("superadmin: TIDAK bisa ubah role diri sendiri lewat dokumen admins", async () => {
+  await assertFails(
+    setDoc(
+      doc(asSuperadmin(), "workspaces", WS, "admins", SUPERADMIN),
+      { name: "Owner", role: "operator" },
+      { merge: true }
+    )
+  );
+});
+
+test("superadmin: BOLEH baca customers, chats, stats, dan deletionLogs (lihat+ekspor)", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi" });
+  await seed(["workspaces", WS, "stats", "2024-01-01"], { messageCount: 1 });
+  await assertSucceeds(getDoc(doc(asSuperadmin(), "workspaces", WS, "customers", CUSTOMER)));
+  await assertSucceeds(getDoc(doc(asSuperadmin(), "workspaces", WS, "stats", "2024-01-01")));
+  await assertSucceeds(
+    getDocs(collection(asSuperadmin(), "workspaces", WS, "deletionLogs"))
+  );
+});
+
+test("superadmin: BOLEH nandain chat sudah dibaca (reset unreadCount)", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi", unreadCount: 3 });
+  await assertSucceeds(
+    setDoc(doc(asSuperadmin(), "workspaces", WS, "customers", CUSTOMER), { unreadCount: 0 }, { merge: true })
+  );
+});
+
+test("superadmin: BOLEH edit profil sendiri (nama/foto)", async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(asSuperadmin(), "workspaces", WS, "admins", SUPERADMIN),
+      { name: "Owner Baru", photo: "https://x/y.png" },
+      { merge: true }
+    )
+  );
 });

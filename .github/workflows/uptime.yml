@@ -1,0 +1,20 @@
+name: Uptime check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cek halaman customer (root)
+        run: |
+          body=$(curl -fsSL --max-time 15 "https://app.imperialttchat.com/")
+          echo "$body" | grep -qi "livechat" || { echo "Konten halaman tidak sesuai yang diharapkan"; exit 1; }
+
+      - name: Cek halaman admin
+        run: |
+          body=$(curl -fsSL --max-time 15 "https://app.imperialttchat.com/admin/")
+          echo "$body" | grep -qi "livechat" || { echo "Konten halaman admin tidak sesuai yang diharapkan"; exit 1; }

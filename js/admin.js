@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import {
   getAuth,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
@@ -16,6 +17,7 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
+  runTransaction,
   collection,
   query,
   orderBy,
@@ -24,7 +26,6 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
-  arrayUnion,
   increment,
   where,
   documentId,
@@ -258,6 +259,7 @@ function dateKeyDaysAgoWIB(daysAgo) {
 // tulis tunggal kalau banyak pesan masuk bersamaan. openStats() di bawah
 // yang menjumlahkan semua pecahan per tanggal pas ditampilkan.
 const STATS_SHARD_COUNT = 10;
+const SEARCH_TEXT_MAX_ENTRIES = 200;
 function statsShardKey() {
   return `${todayKeyWIB()}_${Math.floor(Math.random() * STATS_SHARD_COUNT)}`;
 }
@@ -274,14 +276,29 @@ function bumpStatBy(field, amount) {
 // percakapan ybs (customer doc belum punya firstResponseAt, tapi sudah
 // punya firstCustomerMessageAt dari sesi customer.js), catat selisih
 // waktunya ke stats harian buat kartu "Respon Pertama" di dashboard.
-function recordFirstResponseIfNeeded(uid) {
-  const data = customersDataMap.get(uid);
-  if (!data || !data.firstCustomerMessageAt || data.firstResponseAt) return;
-  const deltaMs = Date.now() - data.firstCustomerMessageAt.toMillis();
-  if (deltaMs < 0) return;
-  setDoc(doc(db, ...wsPath("customers", uid)), { firstResponseAt: serverTimestamp() }, { merge: true }).catch(() => {});
-  bumpStatBy("firstResponseTotalMs", deltaMs);
-  bumpStat("firstResponseCount");
+// Pakai transaction (bukan cuma cek customersDataMap lokal + setDoc lepas)
+// supaya dua balasan cepat berturut-turut (atau dua admin beda tab/sesi
+// yang balas nyaris bersamaan) tidak dobel nge-bump stat -- customersDataMap
+// baru ke-update setelah snapshot listener nangkep perubahan server, jadi
+// cek "sudah ada firstResponseAt belum" harus baca langsung dari server di
+// dalam transaction yang sama dengan penulisannya, bukan dari cache lokal.
+async function recordFirstResponseIfNeeded(uid) {
+  const customerRef = doc(db, ...wsPath("customers", uid));
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(customerRef);
+      const data = snap.data();
+      if (!data || !data.firstCustomerMessageAt || data.firstResponseAt) return;
+      const deltaMs = Date.now() - data.firstCustomerMessageAt.toMillis();
+      if (deltaMs < 0) return;
+      tx.set(customerRef, { firstResponseAt: serverTimestamp() }, { merge: true });
+      const statsRef = doc(db, ...wsPath("stats", statsShardKey()));
+      tx.set(statsRef, { firstResponseTotalMs: increment(deltaMs), firstResponseCount: increment(1) }, { merge: true });
+    });
+  } catch (err) {
+    // Best-effort seperti bumpStat/bumpStatBy lain -- gagal catat stat tidak
+    // boleh sampai bikin pengiriman pesan gagal.
+  }
 }
 
 const loadingScreen = document.getElementById("loading-screen");
@@ -291,6 +308,8 @@ const emailInput = document.getElementById("email-input");
 const passwordInput = document.getElementById("password-input");
 const loginBtn = document.getElementById("login-btn");
 const loginError = document.getElementById("login-error");
+const forgotPasswordBtn = document.getElementById("forgot-password-btn");
+const loginForgotSuccess = document.getElementById("login-forgot-success");
 const adminEmailEl = document.getElementById("admin-email");
 const adminRoleLabelEl = document.getElementById("admin-role-label");
 const sidebarAvatarEl = document.getElementById("sidebar-avatar");
@@ -2389,9 +2408,24 @@ async function refreshLastMessagePreview(uid) {
   }
 }
 
-function indexSearchText(uid, text) {
+// Dibatasi ke entri terbaru (bukan arrayUnion tanpa batas) supaya chat yang
+// berumur panjang (bulanan) tidak bikin field searchText tumbuh tanpa henti
+// -- arrayUnion tidak bisa sekalian motong dari depan, jadi di sini baca
+// dulu isinya lewat transaction baru ditulis ulang utuh.
+async function indexSearchText(uid, text) {
   if (!text) return;
-  setDoc(doc(db, ...wsPath("customers", uid)), { searchText: arrayUnion(text) }, { merge: true }).catch(() => {});
+  const customerRef = doc(db, ...wsPath("customers", uid));
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(customerRef);
+      const existing = Array.isArray(snap.data()?.searchText) ? snap.data().searchText : [];
+      const next = [...existing, text].slice(-SEARCH_TEXT_MAX_ENTRIES);
+      tx.set(customerRef, { searchText: next }, { merge: true });
+    });
+  } catch (err) {
+    // Best-effort seperti indexing lain -- gagal nge-index tidak boleh
+    // sampai bikin pengiriman pesan gagal.
+  }
 }
 
 // SATU-SATUNYA titik yang boleh addDoc ke chats/{uid}/messages dari sisi
@@ -2549,6 +2583,29 @@ loginBtn.addEventListener("click", async () => {
 
 passwordInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loginBtn.click();
+});
+
+forgotPasswordBtn.addEventListener("click", async () => {
+  const email = emailInput.value.trim();
+  loginError.classList.add("hidden");
+  loginForgotSuccess.classList.add("hidden");
+  if (!email) {
+    showLoginError("Isi email dulu di atas, baru klik \"Lupa password?\".");
+    return;
+  }
+  forgotPasswordBtn.disabled = true;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    loginForgotSuccess.textContent = "Link reset password sudah dikirim ke " + email + ". Cek inbox (atau folder spam).";
+    loginForgotSuccess.classList.remove("hidden");
+  } catch (err) {
+    // Firebase sengaja tidak bedain "email tidak terdaftar" dari sukses di
+    // beberapa konfigurasi -- tapi kalau errornya memang muncul, tetap
+    // tampilkan biar admin tahu ada masalah (mis. format email salah).
+    showLoginError("Gagal mengirim email reset: " + err.message);
+  } finally {
+    forgotPasswordBtn.disabled = false;
+  }
 });
 
 settingsLogoutBtn.addEventListener("click", async () => {
