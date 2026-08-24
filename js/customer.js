@@ -12,6 +12,7 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  runTransaction,
   collection,
   query,
   orderBy,
@@ -20,8 +21,7 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
-  increment,
-  arrayUnion
+  increment
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import {
   initializeAppCheck,
@@ -919,13 +919,24 @@ async function touchCustomerDoc(lastMessage) {
   );
 }
 
-function indexSearchText(text) {
+const SEARCH_TEXT_MAX_ENTRIES = 200;
+
+// Dibatasi ke entri terbaru (bukan arrayUnion tanpa batas) supaya chat yang
+// berumur panjang (bulanan) tidak bikin field searchText tumbuh tanpa henti
+// -- lihat catatan sama di admin.js (indexSearchText).
+async function indexSearchText(text) {
   if (!text || !currentUser) return;
-  setDoc(
-    doc(db, ...wsPath("customers", currentUser.uid)),
-    { searchText: arrayUnion(text) },
-    { merge: true }
-  ).catch(() => {});
+  const customerRef = doc(db, ...wsPath("customers", currentUser.uid));
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(customerRef);
+      const existing = Array.isArray(snap.data()?.searchText) ? snap.data().searchText : [];
+      const next = [...existing, text].slice(-SEARCH_TEXT_MAX_ENTRIES);
+      tx.set(customerRef, { searchText: next }, { merge: true });
+    });
+  } catch (err) {
+    // Best-effort, sama seperti sebelumnya (arrayUnion + .catch(() => {})).
+  }
 }
 
 // SATU-SATUNYA titik yang boleh addDoc ke chats/{uid}/messages, dipakai baik

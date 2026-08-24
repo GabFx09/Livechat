@@ -329,6 +329,31 @@ button:not(:disabled):active {
   cursor: default;
 }
 
+.auth-forgot-link {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: center;
+}
+
+.auth-forgot-link:hover {
+  color: var(--accent);
+}
+
+.auth-forgot-success {
+  color: #4caf7d;
+  font-size: 0.85rem;
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+
 .error {
   color: #ff6b6b;
   font-size: 0.85rem;
