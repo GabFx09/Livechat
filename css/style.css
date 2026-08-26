@@ -12,6 +12,9 @@
   --online: #3ddc84;
   --offline: #565c68;
   --danger: #e5484d;
+  --danger-soft: #ff6b6b;
+  --success: #4caf7d;
+  --warning: #ffb020;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
@@ -19,6 +22,33 @@
   --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.28);
   --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.4);
   --shadow-accent: 0 6px 18px rgba(91, 140, 255, 0.35);
+}
+
+/* Tema terang untuk dashboard admin (toggle di Pengaturan > Profil) --
+   diaktifkan lewat atribut data-theme di <html>, cuma di-set oleh
+   admin/index.html. Widget customer & signup.html tidak pernah set atribut
+   ini jadi tetap gelap seperti biasa walau berbagi file CSS yang sama. */
+:root[data-theme="light"] {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-alt: #eef0f3;
+  --border: #dde1e6;
+  --text: #1a1d23;
+  --text-dim: #5c6370;
+  --accent: #3b6fe0;
+  --accent-2: #6a5cf0;
+  --accent-dim: #dce4fb;
+  --accent-grad: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, #2f57b8 100%);
+  --online: #2fa968;
+  --offline: #9aa1ac;
+  --danger: #d93a3f;
+  --danger-soft: #e0555a;
+  --success: #2f9463;
+  --warning: #c98416;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.14);
+  --shadow-accent: 0 6px 18px rgba(59, 111, 224, 0.25);
 }
 
 * { box-sizing: border-box; }
@@ -348,14 +378,14 @@ button:not(:disabled):active {
 }
 
 .auth-forgot-success {
-  color: #4caf7d;
+  color: var(--success);
   font-size: 0.85rem;
   margin: 10px 0 0;
   line-height: 1.5;
 }
 
 .error {
-  color: #ff6b6b;
+  color: var(--danger-soft);
   font-size: 0.85rem;
   margin-top: 10px;
 }
@@ -536,7 +566,7 @@ button:not(:disabled):active {
   height: 18px;
   padding: 0 4px;
   border-radius: 999px;
-  background: #ff5b5b;
+  background: var(--danger-soft);
   color: white;
   font-size: 0.65rem;
   font-weight: 700;
@@ -974,7 +1004,7 @@ button:not(:disabled):active {
 }
 
 .stats-delta.up { color: var(--online); }
-.stats-delta.down { color: #ff6b6b; }
+.stats-delta.down { color: var(--danger-soft); }
 .stats-delta.flat { color: var(--text-dim); }
 
 .stats-chart-card {
@@ -1035,7 +1065,7 @@ button:not(:disabled):active {
 }
 
 .stats-bar-wrap.is-today .stats-bar {
-  background: #ffb020;
+  background: var(--warning);
   opacity: 1;
 }
 
@@ -1150,7 +1180,7 @@ button:not(:disabled):active {
 }
 
 .saved-reply-delete-btn:hover {
-  color: #ff6b6b;
+  color: var(--danger-soft);
 }
 
 .saved-reply-empty {
@@ -1546,7 +1576,7 @@ button:not(:disabled):active {
   text-align: center;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #e5484d;
+  color: var(--danger);
   background: rgba(229, 72, 77, 0.1);
   border-top: 1px solid var(--border);
 }
@@ -1557,7 +1587,7 @@ button:not(:disabled):active {
   text-align: center;
   font-size: 0.82rem;
   font-weight: 600;
-  color: #ffb020;
+  color: var(--warning);
   background: rgba(255, 176, 32, 0.12);
   border-bottom: 1px solid var(--border);
 }
@@ -2108,9 +2138,9 @@ button:not(:disabled):active {
   margin-top: 8px;
   padding: 11px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid #ff6b6b;
+  border: 1px solid var(--danger-soft);
   background: transparent;
-  color: #ff6b6b;
+  color: var(--danger-soft);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease;

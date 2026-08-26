@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Admin - LiveChat</title>
+<script>
+  (function () {
+    if (localStorage.getItem("livechat-admin-theme") === "light") {
+      document.documentElement.dataset.theme = "light";
+    }
+  })();
+</script>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -120,6 +127,10 @@
           <input id="photo-input" type="file" accept="image/*" class="hidden" />
           <label class="auth-label" for="display-name-input">Nama Tampilan</label>
           <input id="display-name-input" type="text" placeholder="Nama tampilan (mis. Admin Toko)" maxlength="40" />
+          <label class="settings-checkbox-row" for="theme-toggle-input">
+            <input id="theme-toggle-input" type="checkbox" />
+            <span>Mode terang</span>
+          </label>
           <button id="settings-save-btn" type="button">Simpan Profil</button>
           <p id="settings-error" class="error hidden"></p>
         </div>
