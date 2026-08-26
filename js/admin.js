@@ -84,6 +84,10 @@ let currentAdmin = null; // { uid, email, name, photo, workspaceId, workspaceNam
 let activeCustomerUid = null;
 let activeCustomerName = "";
 let editingCustomerNameUid = null; // lihat startEditCustomerName() & listenCustomers()
+// Draft balasan yang belum dikirim, per customer (uid -> teks) -- supaya
+// ganti-ganti chat sebelum sempat klik kirim tidak bikin teksnya "lengket"
+// kebawa ke chat lain. Disimpan/dipulihkan di openCustomer().
+const draftMessages = new Map();
 let unsubMessages = null;
 // Chat yang sudah lama bisa punya ribuan pesan -- me-load dan nge-render
 // SEMUANYA sekaligus tiap buka chat (perilaku lama) makin lama makin berat
@@ -2087,9 +2091,13 @@ function startEditMessage(messageId, currentText, bubbleEl) {
   const editWrap = document.createElement("div");
   editWrap.className = "edit-wrap";
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "edit-input";
+  // Textarea (bukan <input type="text">) supaya pesan berbait-bait tidak
+  // kepotong jadi 1 baris -- value sanitization algorithm bawaan browser
+  // buat <input> otomatis membuang karakter newline dari .value, jadi kalau
+  // pakai <input> di sini isi multi-baris bakal ke-strip begitu di-Simpan.
+  const input = document.createElement("textarea");
+  input.className = "edit-input edit-textarea";
+  input.rows = 1;
   input.value = currentText;
 
   const saveBtn = document.createElement("button");
@@ -2106,6 +2114,14 @@ function startEditMessage(messageId, currentText, bubbleEl) {
   editWrap.appendChild(saveBtn);
   editWrap.appendChild(cancelBtn);
   p.replaceWith(editWrap);
+
+  const autoResize = () => {
+    input.style.height = "auto";
+    input.style.height = input.scrollHeight + "px";
+  };
+  autoResize();
+  input.addEventListener("input", autoResize);
+
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
 
@@ -2113,7 +2129,12 @@ function startEditMessage(messageId, currentText, bubbleEl) {
   cancelBtn.addEventListener("click", cancel);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Escape") cancel();
-    if (e.key === "Enter") saveBtn.click();
+    // Enter polos = simpan, Shift+Enter = baris baru (sama seperti komposer
+    // pesan utama di messageInput).
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveBtn.click();
+    }
   });
 
   saveBtn.addEventListener("click", async () => {
@@ -2147,6 +2168,15 @@ async function deleteMessage(messageId) {
 }
 
 function openCustomer(uid, name) {
+  // Simpan draft chat yang lagi ditinggalkan (kalau ada isinya) sebelum
+  // activeCustomerUid ditimpa -- kalau kosong, buang entry lamanya (misal
+  // habis kirim) supaya map ini tidak numpuk draft basi selamanya.
+  if (activeCustomerUid && activeCustomerUid !== uid) {
+    const leavingDraft = messageInput.value;
+    if (leavingDraft) draftMessages.set(activeCustomerUid, leavingDraft);
+    else draftMessages.delete(activeCustomerUid);
+  }
+
   activeCustomerUid = uid;
   activeCustomerName = name;
   editingCustomerNameUid = null;
@@ -2159,6 +2189,8 @@ function openCustomer(uid, name) {
   // kelihatan tombol yang bakal gagal).
   if (!isSuperadmin()) {
     messageForm.classList.remove("hidden");
+    messageInput.value = draftMessages.get(uid) || "";
+    autoResizeMessageInput();
     messageInput.focus();
   }
 
