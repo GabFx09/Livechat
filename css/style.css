@@ -726,6 +726,15 @@ button:not(:disabled):active {
   text-overflow: ellipsis;
 }
 
+.customer-item .preview.is-draft .draft-label {
+  color: #e0554f;
+  font-weight: 600;
+}
+
+.user-item.active .preview.is-draft .draft-label {
+  color: #ffd7d5;
+}
+
 .customer-item .badge {
   flex-shrink: 0;
   margin-left: auto;

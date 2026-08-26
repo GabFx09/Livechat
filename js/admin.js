@@ -1051,6 +1051,38 @@ function closeSuggestions() {
 function autoResizeMessageInput() {
   messageInput.style.height = "auto";
   messageInput.style.height = messageInput.scrollHeight + "px";
+  refreshDraftPreviewForRow(activeCustomerUid);
+}
+
+// Isi 1 elemen <span class="preview"> buat 1 customer: kalau ada draft
+// belum terkirim (punya chat yang lagi aktif dibaca langsung dari
+// messageInput, yang lain dari draftMessages -- lihat openCustomer()),
+// tampilkan label "Draft:" + isinya menggantikan preview pesan terakhir.
+function renderPreviewInto(previewEl, uid, data) {
+  const draftText = uid === activeCustomerUid ? messageInput.value : draftMessages.get(uid);
+  previewEl.innerHTML = "";
+  previewEl.classList.toggle("is-draft", !!draftText);
+  if (draftText) {
+    const label = document.createElement("strong");
+    label.className = "draft-label";
+    label.textContent = "Draft: ";
+    previewEl.appendChild(label);
+    previewEl.appendChild(document.createTextNode(draftText));
+  } else {
+    previewEl.textContent = (data && data.lastMessage) || "";
+  }
+}
+
+// Update baris <li> 1 customer di sidebar aja (bukan renderCustomerList()
+// penuh) tiap draft-nya berubah -- supaya ngetik di kolom balas tidak
+// bikin sidebar ke-render ulang semua & kehilangan posisi scroll.
+function refreshDraftPreviewForRow(uid) {
+  if (!uid) return;
+  const row = getCustomerRowEl(uid);
+  if (!row) return;
+  const previewEl = row.querySelector(".preview");
+  if (!previewEl) return;
+  renderPreviewInto(previewEl, uid, customersDataMap.get(uid));
 }
 
 messageInput.addEventListener("input", () => {
@@ -1516,7 +1548,7 @@ function buildCustomerRowEl(uid, data) {
 
   const preview = document.createElement("span");
   preview.className = "preview";
-  preview.textContent = data.lastMessage || "";
+  renderPreviewInto(preview, uid, data);
   info.appendChild(preview);
 
   li.appendChild(info);
