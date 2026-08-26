@@ -1412,6 +1412,14 @@ button:not(:disabled):active {
   font-size: 0.9rem;
 }
 
+.edit-textarea {
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
 .edit-save-btn,
 .edit-cancel-btn {
   flex-shrink: 0;
