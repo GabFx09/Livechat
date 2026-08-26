@@ -340,6 +340,7 @@ const settingsHoursView = document.getElementById("settings-hours-view");
 const avatarPreview = document.getElementById("avatar-preview");
 const photoInput = document.getElementById("photo-input");
 const displayNameInput = document.getElementById("display-name-input");
+const themeToggleInput = document.getElementById("theme-toggle-input");
 const settingsSaveBtn = document.getElementById("settings-save-btn");
 const settingsError = document.getElementById("settings-error");
 const settingsLogoutBtn = document.getElementById("settings-logout-btn");
@@ -2758,8 +2759,29 @@ function openProfileSettings() {
   displayNameInput.value = currentAdmin.name !== currentAdmin.email ? currentAdmin.name : "";
   renderAvatar(avatarPreview, currentAdmin.photo, currentAdmin.name);
   settingsError.classList.add("hidden");
+  themeToggleInput.checked = localStorage.getItem(THEME_STORAGE_KEY) === "light";
   settingsProfileView.classList.remove("hidden");
 }
+
+// Preferensi tampilan gelap/terang -- per browser (localStorage), bukan
+// per akun admin, makanya tidak ikut disimpan ke Firestore lewat tombol
+// "Simpan Profil". Langsung diterapkan begitu dicentang/dilepas, tidak
+// nunggu tombol Simpan. Cocokkan THEME_STORAGE_KEY dengan script inline
+// anti-flash di <head> admin/index.html kalau mau ganti nama key ini.
+const THEME_STORAGE_KEY = "livechat-admin-theme";
+
+function applyTheme(theme) {
+  if (theme === "light") {
+    document.documentElement.dataset.theme = "light";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
+
+themeToggleInput.addEventListener("change", () => {
+  applyTheme(themeToggleInput.checked ? "light" : "dark");
+});
 
 function renderImagePreview(el, dataUrl, placeholderText) {
   if (dataUrl) {
