@@ -21,7 +21,8 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
-  increment
+  increment,
+  Timestamp
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import {
   initializeAppCheck,
@@ -152,6 +153,7 @@ const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
 const sessionEndedBanner = document.getElementById("session-ended-banner");
+const spamLockBanner = document.getElementById("spam-lock-banner");
 const hoursOfflineBanner = document.getElementById("hours-offline-banner");
 const hoursOfflineBannerLogin = document.getElementById("hours-offline-banner-login");
 const brandNameEls = document.querySelectorAll("[data-brand-name]");
@@ -541,7 +543,12 @@ function updateChatHeader() {
   chatHeader.appendChild(span);
 }
 
-function enterChat(uid, name) {
+// lockedUntilMs (opsional): kalau customer ini masih dalam masa kunci spam
+// dari sesi sebelumnya (lihat triggerSpamLock/nextRepeatFields) -- dibaca
+// dari field lockedUntil dokumen customers/{uid} yang sudah ada SEBELUM
+// enterChat dipanggil, jadi kunci ini tetap berlaku walau halaman di-reload
+// (bukan cuma variabel in-memory yang hilang pas reload).
+function enterChat(uid, name, lockedUntilMs = 0) {
   sessionActive = true;
   currentUser = { uid, name };
   loginScreen.classList.add("hidden");
@@ -553,6 +560,11 @@ function enterChat(uid, name) {
 
   if (lastSeenIntervalId) clearInterval(lastSeenIntervalId);
   lastSeenIntervalId = setInterval(refreshLastSeen, LAST_SEEN_REFRESH_MS);
+
+  if (lockedUntilMs > Date.now()) {
+    spamLockedUntilMs = lockedUntilMs;
+    triggerSpamLock();
+  }
 }
 
 // Kalau admin menghapus dokumen customers/{uid} ini (tombol "Hapus Semua
@@ -900,6 +912,78 @@ function nextBurstFields() {
   return { burstCount };
 }
 
+// Anti-spam tambahan: customer yang kirim 5 pesan PERSIS SAMA dalam 10 detik
+// dianggap spam (bukan sekadar ledakan pesan apa pun kayak burst di atas) --
+// sesi langsung dikunci REPEAT_LOCKOUT_MS dan customer tidak bisa kirim apa-apa
+// sampai masa kunci itu habis (lihat triggerSpamLock). Sama seperti burst,
+// dilacak in-memory karena instance ini satu-satunya penulis field ini buat
+// customer ybs dalam sesi ini. lockedUntil ditulis sebagai Timestamp beneran
+// (bukan serverTimestamp() sentinel) supaya bisa dipakai perbandingan
+// request.time > lockedUntil di firestore.rules.
+const REPEAT_LIMIT = 5;
+const REPEAT_WINDOW_MS = 10000;
+const SPAM_LOCKOUT_MS = 5 * 60 * 1000;
+let repeatText = null;
+let repeatWindowStartMs = 0;
+let repeatCount = 0;
+let spamLockedUntilMs = 0;
+
+function nextRepeatFields(text) {
+  const now = Date.now();
+  const isSameBurst = text === repeatText && now - repeatWindowStartMs <= REPEAT_WINDOW_MS;
+  if (isSameBurst) {
+    repeatCount++;
+  } else {
+    repeatText = text;
+    repeatWindowStartMs = now;
+    repeatCount = 1;
+  }
+
+  if (repeatCount >= REPEAT_LIMIT) {
+    spamLockedUntilMs = now + SPAM_LOCKOUT_MS;
+    repeatText = null;
+    repeatCount = 0;
+    return { lockedUntil: Timestamp.fromMillis(spamLockedUntilMs) };
+  }
+  return {};
+}
+
+let spamLockIntervalId = null;
+
+function updateSpamLockCountdown() {
+  const remainingMs = spamLockedUntilMs - Date.now();
+  if (remainingMs <= 0) {
+    clearInterval(spamLockIntervalId);
+    spamLockIntervalId = null;
+    spamLockedUntilMs = 0;
+    messageInput.disabled = false;
+    imageInput.disabled = false;
+    messageForm.classList.remove("locked");
+    spamLockBanner.classList.add("hidden");
+    return;
+  }
+  const remainingSec = Math.ceil(remainingMs / 1000);
+  const mm = Math.floor(remainingSec / 60);
+  const ss = String(remainingSec % 60).padStart(2, "0");
+  spamLockBanner.textContent = `Terdeteksi pesan berulang (spam). Anda bisa chat lagi dalam ${mm}:${ss}.`;
+}
+
+// Dipanggil begitu terdeteksi 5 pesan sama beruntun (lihat nextRepeatFields),
+// dan juga dipanggil ulang di enterChat() kalau customer reload halaman
+// selagi masih dalam masa kunci. Beda dari handleSessionDeleted (yang
+// permanen sampai tab ditutup ulang), ini otomatis lepas sendiri begitu
+// SPAM_LOCKOUT_MS habis -- form TIDAK sampai disembunyikan/reset, cuma
+// dikunci sementara.
+function triggerSpamLock() {
+  messageInput.disabled = true;
+  imageInput.disabled = true;
+  messageForm.classList.add("locked");
+  spamLockBanner.classList.remove("hidden");
+  updateSpamLockCountdown();
+  if (spamLockIntervalId) clearInterval(spamLockIntervalId);
+  spamLockIntervalId = setInterval(updateSpamLockCountdown, 1000);
+}
+
 async function touchCustomerDoc(lastMessage) {
   await setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
@@ -913,10 +997,12 @@ async function touchCustomerDoc(lastMessage) {
       archivedAt: null,
       expireAt: null,
       typingDraft: null,
-      ...nextBurstFields()
+      ...nextBurstFields(),
+      ...nextRepeatFields(lastMessage)
     },
     { merge: true }
   );
+  if (spamLockedUntilMs > Date.now()) triggerSpamLock();
 }
 
 const SEARCH_TEXT_MAX_ENTRIES = 200;
@@ -988,7 +1074,7 @@ messageInput.addEventListener("input", () => {
 // (lihat renderMessage type "options") -- keduanya butuh urutan addDoc ->
 // touchCustomerDoc -> bumpStat yang persis sama.
 async function sendTextMessage(text) {
-  if (!text || !currentUser || !sessionActive) return;
+  if (!text || !currentUser || !sessionActive || spamLockedUntilMs > Date.now()) return;
 
   try {
     forceScrollToBottomNext = true;
@@ -1083,7 +1169,7 @@ function refreshLastSeen() {
 // nyetel balasan otomatis buat pilihan itu (Pengaturan > Auto-Chat), susulkan
 // balasannya dengan jeda singkat.
 async function selectOption(opt) {
-  if (!currentUser || !sessionActive || optionSelectCount >= OPTION_SELECT_LIMIT) return;
+  if (!currentUser || !sessionActive || optionSelectCount >= OPTION_SELECT_LIMIT || spamLockedUntilMs > Date.now()) return;
 
   // Dinaikkan duluan secara synchronous (sebelum await apa pun) supaya
   // klik ganda yang nyaris bersamaan tidak bisa dua-duanya lolos dari guard
@@ -1124,7 +1210,7 @@ messageForm.addEventListener("submit", async (e) => {
 // Dipakai baik oleh input file (klik ikon 🖼️) maupun paste screenshot
 // (Ctrl+V) langsung di kolom pesan -- lihat listener "paste" di bawah.
 async function sendImageFile(file) {
-  if (!file || !currentUser || !sessionActive) return;
+  if (!file || !currentUser || !sessionActive || spamLockedUntilMs > Date.now()) return;
 
   let dataUrl;
   try {
@@ -1238,7 +1324,7 @@ startBtn.addEventListener("click", async () => {
 
     await setDoc(doc(db, ...wsPath("customers", user.uid)), initialUpdate, { merge: true });
     if (isNewCustomer) bumpStat("newCustomers");
-    enterChat(user.uid, name);
+    enterChat(user.uid, name, existingData?.lockedUntil ? existingData.lockedUntil.toMillis() : 0);
     captureVisitorInfo(user.uid);
 
     if (isNewCustomer && autoGreetingEnabled) {
@@ -1401,7 +1487,7 @@ function loadInitialDataInBackground(onBrandingSettled) {
       const data = customerSnap.data();
       const sessionReset = sessionShouldReset(data);
       optionSelectCount = sessionReset ? 0 : data.optionSelectCount || 0;
-      enterChat(user.uid, data.name);
+      enterChat(user.uid, data.name, data.lockedUntil ? data.lockedUntil.toMillis() : 0);
       captureVisitorInfo(user.uid);
 
       const seenUpdate = { lastSeenAt: serverTimestamp() };

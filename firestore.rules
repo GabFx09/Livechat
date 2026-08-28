@@ -142,6 +142,19 @@ service cloud.firestore {
           cust.data.burstCount < 5;
       }
 
+      // Kunci tambahan: kalau customer sempat kirim 5 pesan PERSIS SAMA
+      // dalam 10 detik (dideteksi & ditulis customer.js lewat
+      // nextRepeatFields/touchCustomerDoc SESUDAH pesan ke-5 itu terkirim),
+      // field lockedUntil kesimpen di dokumen customer -- selama belum
+      // lewat, TIDAK ada pesan baru dari customer ybs yang boleh masuk,
+      // bahkan kalau JS di browsernya di-bypass langsung lewat SDK/network.
+      function customerNotLocked(customerId) {
+        let cust = get(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId));
+        return !('lockedUntil' in cust.data) ||
+          cust.data.lockedUntil == null ||
+          request.time > cust.data.lockedUntil;
+      }
+
       allow update: if isWorkspaceOperator() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['brandName', 'themeColor', 'bubbleIcon', 'bubbleImageBase64', 'headerLogoBase64',
@@ -217,7 +230,8 @@ service cloud.firestore {
           request.resource.data.type in ['text', 'image'] &&
           (request.resource.data.type != 'text' || request.resource.data.text.size() <= 4000) &&
           exists(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId)) &&
-          customerNotSpamming(customerId);
+          customerNotSpamming(customerId) &&
+          customerNotLocked(customerId);
 
         allow create: if isWorkspaceOperator() &&
           request.resource.data.sender == 'admin' &&

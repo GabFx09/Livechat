@@ -252,6 +252,40 @@ test("chats: pesan customer LOLOS kalau window burst sebelumnya sudah lewat 3 de
   );
 });
 
+test("chats: anti-spam menolak pesan selama masih dalam masa lockedUntil", async () => {
+  const future = Timestamp.fromMillis(Date.now() + 60000);
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    lockedUntil: future
+  });
+  const db = asCustomer();
+  await assertFails(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "coba kirim lagi padahal masih dikunci",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("chats: pesan customer LOLOS kalau lockedUntil sudah lewat", async () => {
+  const past = Timestamp.fromMillis(Date.now() - 1000);
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    lockedUntil: past
+  });
+  const db = asCustomer();
+  await assertSucceeds(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "masa kunci sudah habis",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
 test("chats: admin boleh kirim balasan dengan senderId uid sendiri", async () => {
   await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi" });
   const db = asAdmin();
