@@ -1598,6 +1598,17 @@ button:not(:disabled):active {
   border-top: 1px solid var(--border);
 }
 
+.spam-lock-banner {
+  margin: 0;
+  padding: 10px 20px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--warning);
+  background: rgba(255, 176, 32, 0.12);
+  border-top: 1px solid var(--border);
+}
+
 .hours-offline-banner {
   margin: 0;
   padding: 10px 20px;

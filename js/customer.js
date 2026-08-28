@@ -154,6 +154,7 @@ const messageInput = document.getElementById("message-input");
 const imageInput = document.getElementById("image-input");
 const sessionEndedBanner = document.getElementById("session-ended-banner");
 const spamLockBanner = document.getElementById("spam-lock-banner");
+const DEFAULT_MESSAGE_PLACEHOLDER = messageInput.placeholder;
 const hoursOfflineBanner = document.getElementById("hours-offline-banner");
 const hoursOfflineBannerLogin = document.getElementById("hours-offline-banner-login");
 const brandNameEls = document.querySelectorAll("[data-brand-name]");
@@ -563,7 +564,7 @@ function enterChat(uid, name, lockedUntilMs = 0) {
 
   if (lockedUntilMs > Date.now()) {
     spamLockedUntilMs = lockedUntilMs;
-    triggerSpamLock();
+    triggerSpamLock(false);
   }
 }
 
@@ -958,6 +959,7 @@ function updateSpamLockCountdown() {
     spamLockedUntilMs = 0;
     messageInput.disabled = false;
     imageInput.disabled = false;
+    messageInput.placeholder = DEFAULT_MESSAGE_PLACEHOLDER;
     messageForm.classList.remove("locked");
     spamLockBanner.classList.add("hidden");
     return;
@@ -965,7 +967,9 @@ function updateSpamLockCountdown() {
   const remainingSec = Math.ceil(remainingMs / 1000);
   const mm = Math.floor(remainingSec / 60);
   const ss = String(remainingSec % 60).padStart(2, "0");
-  spamLockBanner.textContent = `Terdeteksi pesan berulang (spam). Anda bisa chat lagi dalam ${mm}:${ss}.`;
+  const countdownText = `${mm}:${ss}`;
+  spamLockBanner.textContent = `⏳ Chat dikunci sementara karena pesan berulang (spam). Anda bisa chat lagi dalam ${countdownText}.`;
+  messageInput.placeholder = `Terkunci -- coba lagi dalam ${countdownText}`;
 }
 
 // Dipanggil begitu terdeteksi 5 pesan sama beruntun (lihat nextRepeatFields),
@@ -974,7 +978,14 @@ function updateSpamLockCountdown() {
 // permanen sampai tab ditutup ulang), ini otomatis lepas sendiri begitu
 // SPAM_LOCKOUT_MS habis -- form TIDAK sampai disembunyikan/reset, cuma
 // dikunci sementara.
-function triggerSpamLock() {
+//
+// isFreshTrigger cuma true kalau kunci ini BARU KEJADIAN dari aksi customer
+// barusan (bukan hasil restore lockedUntil pas reload halaman) -- dipakai
+// buat nembak alert() SEKALI biar customer yang gak merhatiin banner/kolom
+// chat yang keredupkan tetap pasti dapat keterangan jelas kenapa tiba-tiba
+// gak bisa ngirim, tanpa ngulang alert itu tiap kali dia reload selagi masih
+// dikunci.
+function triggerSpamLock(isFreshTrigger) {
   messageInput.disabled = true;
   imageInput.disabled = true;
   messageForm.classList.add("locked");
@@ -982,6 +993,12 @@ function triggerSpamLock() {
   updateSpamLockCountdown();
   if (spamLockIntervalId) clearInterval(spamLockIntervalId);
   spamLockIntervalId = setInterval(updateSpamLockCountdown, 1000);
+  if (isFreshTrigger) {
+    alert(
+      "Anda mengirim pesan yang sama 5x berturut-turut dalam waktu singkat. " +
+      "Untuk mencegah spam, kolom chat dikunci sementara selama 5 menit."
+    );
+  }
 }
 
 async function touchCustomerDoc(lastMessage) {
@@ -1002,7 +1019,7 @@ async function touchCustomerDoc(lastMessage) {
     },
     { merge: true }
   );
-  if (spamLockedUntilMs > Date.now()) triggerSpamLock();
+  if (spamLockedUntilMs > Date.now()) triggerSpamLock(true);
 }
 
 const SEARCH_TEXT_MAX_ENTRIES = 200;
