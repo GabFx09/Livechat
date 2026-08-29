@@ -575,7 +575,17 @@ function enterChat(uid, name, lockedUntilMs = 0) {
 function listenSessionAlive(uid) {
   if (unsubCustomerDoc) unsubCustomerDoc();
   unsubCustomerDoc = onSnapshot(doc(db, ...wsPath("customers", uid)), (snap) => {
-    if (!snap.exists()) handleSessionDeleted();
+    if (!snap.exists()) {
+      handleSessionDeleted();
+      return;
+    }
+    // Kalau admin meng-edit nama customer selagi sesi jalan, ikut update di
+    // sini supaya currentUser.name (dipakai presencePayload dsb) tidak basi.
+    const docName = snap.data().name;
+    if (docName && currentUser && docName !== currentUser.name) {
+      currentUser.name = docName;
+      if (rtdb) goOnlineRtdb();
+    }
   });
 }
 
@@ -929,16 +939,28 @@ let repeatWindowStartMs = 0;
 let repeatCount = 0;
 let spamLockedUntilMs = 0;
 
+// Kunci "lagi mengirim" -- pesan customer dikirim satu per satu. Tanpa ini,
+// Enter yang ditahan / submit beruntun / klik ganda bikin beberapa
+// sendTextMessage() jalan PARALEL: semuanya lolos guard spamLockedUntilMs
+// secara sinkron SEBELUM pesan ke-5 sempat menyalakan lock, jadi 10+ pesan
+// sama bisa tembus sebelum sesi kekunci. Dengan serialisasi ini, counter
+// pesan-berulang naik urut dan lock nyala tepat waktu.
+let sendInFlight = false;
+
 function nextRepeatFields(text) {
   const now = Date.now();
-  const isSameBurst = text === repeatText && now - repeatWindowStartMs <= REPEAT_WINDOW_MS;
-  if (isSameBurst) {
+  // Ambang 10 detik dihitung dari pesan SAMA yang TERAKHIR, bukan yang
+  // pertama -- dulu repeatWindowStartMs cuma di-set pas ganti teks, jadi
+  // customer yang nge-drip pesan sama tiap ~9 detik tidak pernah kena
+  // (pesan ke-2 sudah lewat 10 detik dari pesan ke-1 -> counter reset).
+  const isSameRepeat = text === repeatText && now - repeatWindowStartMs <= REPEAT_WINDOW_MS;
+  if (isSameRepeat) {
     repeatCount++;
   } else {
     repeatText = text;
-    repeatWindowStartMs = now;
     repeatCount = 1;
   }
+  repeatWindowStartMs = now;
 
   if (repeatCount >= REPEAT_LIMIT) {
     spamLockedUntilMs = now + SPAM_LOCKOUT_MS;
@@ -1005,7 +1027,11 @@ async function touchCustomerDoc(lastMessage) {
   await setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
     {
-      name: currentUser.name,
+      // `name` SENGAJA tidak ditulis di sini. Dokumen customer selalu sudah
+      // punya nama sebelum pesan pertama bisa dikirim (diisi startChat /
+      // auto-rejoin), dan menulisnya ulang tiap pesan bikin edit nama dari
+      // sisi admin ke-timpa balik ke nama lama yang diketik customer tiap
+      // kali customer lanjut chat -- persis keluhan "nama balik lagi".
       lastMessage,
       lastMessageAt: serverTimestamp(),
       lastSender: "customer",
@@ -1092,32 +1118,38 @@ messageInput.addEventListener("input", () => {
 // touchCustomerDoc -> bumpStat yang persis sama.
 async function sendTextMessage(text) {
   if (!text || !currentUser || !sessionActive || spamLockedUntilMs > Date.now()) return;
+  if (sendInFlight) return;
+  sendInFlight = true;
 
   try {
-    forceScrollToBottomNext = true;
-    await writeMessage(currentUser.uid, {
-      sender: "customer",
-      type: "text",
-      text,
-      timestamp: serverTimestamp()
-    });
-  } catch (err) {
-    forceScrollToBottomNext = false;
-    console.error("Gagal addDoc ke chats/" + currentUser.uid + "/messages:", err);
-    alert("Gagal mengirim pesan (tulis chat): " + err.code + " - " + err.message);
-    return;
-  }
+    try {
+      forceScrollToBottomNext = true;
+      await writeMessage(currentUser.uid, {
+        sender: "customer",
+        type: "text",
+        text,
+        timestamp: serverTimestamp()
+      });
+    } catch (err) {
+      forceScrollToBottomNext = false;
+      console.error("Gagal addDoc ke chats/" + currentUser.uid + "/messages:", err);
+      alert("Gagal mengirim pesan (tulis chat): " + err.code + " - " + err.message);
+      return;
+    }
 
-  try {
-    await touchCustomerDoc(text);
-  } catch (err) {
-    console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
-    alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
-    return;
-  }
+    try {
+      await touchCustomerDoc(text);
+    } catch (err) {
+      console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
+      alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
+      return;
+    }
 
-  bumpStat("messageCount");
-  bumpStat("customerMessageCount");
+    bumpStat("messageCount");
+    bumpStat("customerMessageCount");
+  } finally {
+    sendInFlight = false;
+  }
 }
 
 // Customer cuma boleh pakai tombol pilihan bantuan maksimal 2x per sesi chat
@@ -1308,9 +1340,14 @@ startBtn.addEventListener("click", async () => {
     optionSelectCount = isNewCustomer || sessionReset ? 0 : existingData.optionSelectCount || 0;
 
     const initialUpdate = {
-      name,
       lastSeenAt: serverTimestamp()
     };
+    // Nama cuma ditulis buat customer baru (atau dokumen lama yang entah
+    // kenapa belum punya nama). Buat customer lama yang namanya sudah ada,
+    // JANGAN di-timpa nama yang baru diketik di form -- kalau admin sempat
+    // meng-edit namanya, ketikan customer di sini (mis. reload lalu "Masuk"
+    // lagi) akan mengembalikannya ke nama lama.
+    if (isNewCustomer || !existingData?.name) initialUpdate.name = name;
     // Cuma diinisialisasi kosong buat customer BARU -- dulu 3 field ini
     // ditulis tanpa syarat di sini, jadi kalau customer LAMA sempat
     // nyampe form ini (race: loadInitialDataInBackground() punya
@@ -1341,7 +1378,9 @@ startBtn.addEventListener("click", async () => {
 
     await setDoc(doc(db, ...wsPath("customers", user.uid)), initialUpdate, { merge: true });
     if (isNewCustomer) bumpStat("newCustomers");
-    enterChat(user.uid, name, existingData?.lockedUntil ? existingData.lockedUntil.toMillis() : 0);
+    // Nama yang dipakai sesi = nama tersimpan (bisa jadi sudah di-edit admin)
+    // kalau customer lama, bukan yang baru diketik di form.
+    enterChat(user.uid, existingData?.name || name, existingData?.lockedUntil ? existingData.lockedUntil.toMillis() : 0);
     captureVisitorInfo(user.uid);
 
     if (isNewCustomer && autoGreetingEnabled) {
