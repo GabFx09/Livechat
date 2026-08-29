@@ -1093,6 +1093,13 @@ messageInput.addEventListener("input", () => {
 });
 
 messageInput.addEventListener("keydown", (e) => {
+  // Kombinasi Alt+... adalah shortcut dashboard (Alt+Enter = arsipkan,
+  // Alt+panah = pindah customer) yang ditangani listener level-document.
+  // Tanpa guard ini, Alt+Enter di dalam textarea ikut ke-tangkap di sini
+  // sebagai "Enter polos" -> requestSubmit() -> draft kekirim TANPA sengaja
+  // tepat sebelum chat-nya diarsipkan.
+  if (e.altKey) return;
+
   if (suggestionMatches.length > 0) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -1164,8 +1171,22 @@ function checkAutoArchive() {
 function closeActiveChat() {
   if (unsubMessages) unsubMessages();
   unsubMessages = null;
+
+  // closeActiveChat() itu satu-satunya jalan keluar chat yang TIDAK lewat
+  // openCustomer() (dipakai pas chat aktif diarsipkan/dihapus). Tanpa dua
+  // baris di bawah, teks yang belum terkirim: (1) ketinggalan nyangkut di
+  // <textarea> dan kelihatan "nempel" pas buka customer lain, (2) tetap
+  // kesimpan di draftMessages jadi "Draft: ..." basi yang muncul terus di
+  // preview sidebar tiap daftarnya ke-render ulang. Chat-nya sudah
+  // diarsipkan/dihapus -> draft-nya memang sudah tidak relevan, buang saja.
+  const closingUid = activeCustomerUid;
+  if (closingUid) draftMessages.delete(closingUid);
+
   activeCustomerUid = null;
   activeCustomerName = "";
+  messageInput.value = "";
+  autoResizeMessageInput();
+  if (closingUid) refreshDraftPreviewForRow(closingUid);
   chatHeaderText.textContent = "Pilih customer di sebelah kiri";
   updateChatHeaderPresence();
   infoToggleBtn.classList.add("hidden");
@@ -1186,6 +1207,13 @@ async function toggleArchive(uid, archived) {
     // (un-archive) sengaja TIDAK ikut nutup, biar admin bisa lanjut chat.
     if (archived && uid === activeCustomerUid) {
       closeActiveChat();
+    } else if (archived) {
+      // Diarsipkan tanpa lewat closeActiveChat() (mis. admin keburu pindah
+      // ke chat lain selagi setDoc di atas masih jalan) -- draft yang belum
+      // terkirim buat chat ini sudah tidak relevan, buang biar tidak
+      // nyangkut jadi "Draft: ..." basi di sidebar.
+      draftMessages.delete(uid);
+      refreshDraftPreviewForRow(uid);
     }
   } catch (err) {
     alert("Gagal mengubah status arsip: " + err.message);
@@ -2507,6 +2535,10 @@ messageForm.addEventListener("submit", async (e) => {
   const text = messageInput.value.trim();
   if (!text || !activeCustomerUid) return;
   messageInput.value = "";
+  // Draft yang disimpan draftMessages buat customer ini sudah kekirim --
+  // buang entry-nya, kalau tidak dia nyangkut jadi "Draft: ..." basi di
+  // preview sidebar & muncul lagi di kolom balas pas chat-nya dibuka ulang.
+  draftMessages.delete(activeCustomerUid);
   autoResizeMessageInput();
 
   try {
