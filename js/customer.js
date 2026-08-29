@@ -1023,7 +1023,13 @@ function triggerSpamLock(isFreshTrigger) {
   }
 }
 
-async function touchCustomerDoc(lastMessage) {
+// repeatFields dihitung pemanggil (nextRepeatFields) dan cuma diisi buat
+// pesan TEKS -- kiriman gambar lewat sini dengan lastMessage "📷 Gambar" yang
+// selalu identik, jadi kalau ikut dihitung, customer yang kirim 5 foto
+// (mis. foto produk/struk) kena kunci "pesan berulang" 5 menit padahal
+// gambarnya beda-beda. Burst limit (5 pesan/3 detik) tetap berlaku buat
+// gambar lewat nextBurstFields().
+async function touchCustomerDoc(lastMessage, repeatFields = {}) {
   await setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
     {
@@ -1041,7 +1047,7 @@ async function touchCustomerDoc(lastMessage) {
       expireAt: null,
       typingDraft: null,
       ...nextBurstFields(),
-      ...nextRepeatFields(lastMessage)
+      ...repeatFields
     },
     { merge: true }
   );
@@ -1138,7 +1144,7 @@ async function sendTextMessage(text) {
     }
 
     try {
-      await touchCustomerDoc(text);
+      await touchCustomerDoc(text, nextRepeatFields(text));
     } catch (err) {
       console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
       alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
@@ -1252,6 +1258,10 @@ messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text) return;
+  // Kalau masih ada kiriman jalan, JANGAN kosongkan input -- biarkan teksnya
+  // tetap di kolom biar customer tinggal Enter lagi, bukan hilang begitu saja
+  // (submit beruntun selagi sendTextMessage() belum kelar).
+  if (sendInFlight) return;
   messageInput.value = "";
   await sendTextMessage(text);
 });
