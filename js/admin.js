@@ -84,6 +84,13 @@ let currentAdmin = null; // { uid, email, name, photo, workspaceId, workspaceNam
 let activeCustomerUid = null;
 let activeCustomerName = "";
 let editingCustomerNameUid = null; // lihat startEditCustomerName() & listenCustomers()
+// Balasan admin yang lagi ditulis ke Firestore (writeMessage + touchCustomerDoc).
+// touchCustomerDoc() menulis `archived: false` di akhir tiap balasan -- kalau
+// admin mengarsipkan tepat setelah membalas ("arsip cepat"), setDoc arsip
+// bisa keburu jalan lalu ke-timpa balik oleh touchCustomerDoc yang telat
+// selesai, jadi chat-nya kelihatan tidak benar-benar terarsip. toggleArchive()
+// menunggu promise ini dulu supaya penulisan arsip selalu jadi yang terakhir.
+let pendingReplyWrite = Promise.resolve();
 // Draft balasan yang belum dikirim, per customer (uid -> teks) -- supaya
 // ganti-ganti chat sebelum sempat klik kirim tidak bikin teksnya "lengket"
 // kebawa ke chat lain. Disimpan/dipulihkan di openCustomer().
@@ -1196,8 +1203,22 @@ function closeActiveChat() {
   typingPreviewEl.classList.add("hidden");
 }
 
+const archiveInFlight = new Set();
+
 async function toggleArchive(uid, archived) {
+  // Cegah panggilan tumpang-tindih buat customer yang sama: Alt+Enter yang
+  // ke-repeat / dobel-klik tombol bisa nembak toggleArchive berkali-kali, dan
+  // begitu snapshot pertama (latency-compensated) sempat nge-flip
+  // customersDataMap ke archived:true selagi setDoc pertama masih jalan,
+  // trigger berikutnya baca `!data.archived` jadi false -> malah un-archive.
+  if (archiveInFlight.has(uid)) return;
+  archiveInFlight.add(uid);
   try {
+    // Tunggu balasan yang mungkin masih ditulis (writeMessage + touchCustomerDoc)
+    // selesai dulu -- touchCustomerDoc menulis `archived: false` di akhir, jadi
+    // kalau tidak ditunggu, "arsip cepat setelah membalas" bisa ke-timpa balik
+    // dan chat-nya tidak benar-benar terarsip.
+    await pendingReplyWrite.catch(() => {});
     const update = archived
       ? { archived: true, archivedAt: serverTimestamp(), expireAt: oneYearFromNow() }
       : { archived: false, archivedAt: null, expireAt: null };
@@ -1217,6 +1238,8 @@ async function toggleArchive(uid, archived) {
     }
   } catch (err) {
     alert("Gagal mengubah status arsip: " + err.message);
+  } finally {
+    archiveInFlight.delete(uid);
   }
 }
 
@@ -2458,9 +2481,9 @@ messagesEl.addEventListener("scroll", () => {
   if (messagesEl.scrollTop < 60) loadOlderMessages();
 });
 
-async function touchCustomerDoc(lastMessage) {
+async function touchCustomerDoc(lastMessage, uid = activeCustomerUid) {
   await setDoc(
-    doc(db, ...wsPath("customers", activeCustomerUid)),
+    doc(db, ...wsPath("customers", uid)),
     {
       lastMessage,
       lastMessageAt: serverTimestamp(),
@@ -2534,32 +2557,36 @@ messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text || !activeCustomerUid) return;
+  const targetUid = activeCustomerUid;
   messageInput.value = "";
   // Draft yang disimpan draftMessages buat customer ini sudah kekirim --
   // buang entry-nya, kalau tidak dia nyangkut jadi "Draft: ..." basi di
   // preview sidebar & muncul lagi di kolom balas pas chat-nya dibuka ulang.
-  draftMessages.delete(activeCustomerUid);
+  draftMessages.delete(targetUid);
   autoResizeMessageInput();
 
-  try {
-    forceScrollToBottomNext = true;
-    await writeMessage(activeCustomerUid, {
-      sender: "admin",
-      senderId: currentAdmin.uid,
-      type: "text",
-      text,
-      senderName: currentAdmin.name,
-      senderPhoto: currentAdmin.photo || null,
-      timestamp: serverTimestamp()
-    });
-    recordFirstResponseIfNeeded(activeCustomerUid);
-    await touchCustomerDoc(text);
-    bumpStat("messageCount");
-    bumpStat("adminMessageCount");
-  } catch (err) {
-    forceScrollToBottomNext = false;
-    alert("Gagal mengirim balasan: " + err.message);
-  }
+  pendingReplyWrite = (async () => {
+    try {
+      forceScrollToBottomNext = true;
+      await writeMessage(targetUid, {
+        sender: "admin",
+        senderId: currentAdmin.uid,
+        type: "text",
+        text,
+        senderName: currentAdmin.name,
+        senderPhoto: currentAdmin.photo || null,
+        timestamp: serverTimestamp()
+      });
+      recordFirstResponseIfNeeded(targetUid);
+      await touchCustomerDoc(text, targetUid);
+      bumpStat("messageCount");
+      bumpStat("adminMessageCount");
+    } catch (err) {
+      forceScrollToBottomNext = false;
+      alert("Gagal mengirim balasan: " + err.message);
+    }
+  })();
+  await pendingReplyWrite;
 });
 
 // Dipakai baik oleh input file (klik ikon 🖼️) maupun paste screenshot
@@ -2595,25 +2622,28 @@ async function sendImageFile(file) {
     return;
   }
 
-  try {
-    forceScrollToBottomNext = true;
-    await writeMessage(targetUid, {
-      sender: "admin",
-      senderId: currentAdmin.uid,
-      type: "image",
-      imageBase64: dataUrl,
-      senderName: currentAdmin.name,
-      senderPhoto: currentAdmin.photo || null,
-      timestamp: serverTimestamp()
-    });
-    recordFirstResponseIfNeeded(targetUid);
-    await touchCustomerDoc("📷 Gambar");
-    bumpStat("messageCount");
-    bumpStat("adminMessageCount");
-  } catch (err) {
-    forceScrollToBottomNext = false;
-    alert(err.message || "Gagal mengirim gambar.");
-  }
+  pendingReplyWrite = (async () => {
+    try {
+      forceScrollToBottomNext = true;
+      await writeMessage(targetUid, {
+        sender: "admin",
+        senderId: currentAdmin.uid,
+        type: "image",
+        imageBase64: dataUrl,
+        senderName: currentAdmin.name,
+        senderPhoto: currentAdmin.photo || null,
+        timestamp: serverTimestamp()
+      });
+      recordFirstResponseIfNeeded(targetUid);
+      await touchCustomerDoc("📷 Gambar", targetUid);
+      bumpStat("messageCount");
+      bumpStat("adminMessageCount");
+    } catch (err) {
+      forceScrollToBottomNext = false;
+      alert(err.message || "Gagal mengirim gambar.");
+    }
+  })();
+  await pendingReplyWrite;
 }
 
 imageInput.addEventListener("change", async () => {
