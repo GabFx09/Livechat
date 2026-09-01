@@ -541,8 +541,26 @@ document.addEventListener("keydown", (e) => {
   if (!activeCustomerUid || !customersDataMap.has(activeCustomerUid)) return;
 
   e.preventDefault();
-  const data = customersDataMap.get(activeCustomerUid);
-  toggleArchive(activeCustomerUid, !data.archived);
+  const uid = activeCustomerUid;
+  const data = customersDataMap.get(uid);
+  const wasArchived = !!data.archived;
+
+  // Alur triase: arsip -> lompat ke customer berikutnya -> arsip -> ...
+  // Tanpa ini, habis arsip chat aktif ditutup ke layar kosong; Alt+bawah
+  // sesudahnya (activeCustomerUid null) malah balik ke paling atas daftar,
+  // bukan lanjut ke yang berikutnya -- itu yang kerasa "kayak ada bug".
+  // Catat dulu SEBELUM toggleArchive() (yang langsung nutup chat & copot
+  // baris ini secara sinkron).
+  let nextEntry = null;
+  if (!wasArchived) {
+    const entries = getVisibleCustomerEntries();
+    const idx = entries.findIndex((en) => en.uid === uid);
+    if (idx !== -1) nextEntry = entries[idx + 1] || entries[idx - 1] || null;
+  }
+
+  toggleArchive(uid, !wasArchived);
+
+  if (nextEntry && nextEntry.uid !== uid) openCustomer(nextEntry.uid, nextEntry.name);
 });
 
 // Ctrl+/ (atau Cmd+/ di Mac) kapan saja membuka panel Saved Replies.
@@ -1213,6 +1231,34 @@ async function toggleArchive(uid, archived) {
   // trigger berikutnya baca `!data.archived` jadi false -> malah un-archive.
   if (archiveInFlight.has(uid)) return;
   archiveInFlight.add(uid);
+
+  // --- Reaksi UI INSTAN, sebelum nyentuh Firestore ---
+  // `await setDoc` di bawah baru resolve pas server ACK, dan kalau barusan
+  // ada balasan terkirim malah nunggu `pendingReplyWrite` (2 round-trip)
+  // dulu. Kalau tutup-chat & copot-baris ditaruh SETELAH await itu (perilaku
+  // lama), Alt+Enter buat arsip kerasa nge-lag ~0.5-2 detik: chat-nya masih
+  // kebuka penuh & barisnya masih nangkring di sidebar, jadi kayak nggak
+  // ngefek -- apalagi kalau langsung buru-buru pindah customer. Tulisan ke
+  // Firestore tetap jalan di bawah (urutannya dijaga), ini cuma UI-nya yang
+  // didahulukan.
+  if (archived) {
+    if (uid === activeCustomerUid) {
+      // Diarsipkan sementara chat ini yang lagi kebuka -> tutup panelnya,
+      // soalnya begitu diarsipkan dia hilang dari daftar Open.
+      closeActiveChat();
+    } else {
+      // Draft yang belum terkirim buat chat ini sudah tidak relevan, buang
+      // biar tidak nyangkut jadi "Draft: ..." basi di sidebar.
+      draftMessages.delete(uid);
+      refreshDraftPreviewForRow(uid);
+    }
+    // Copot barisnya sekarang juga kalau tab yang lagi kebuka memang tidak
+    // menampilkan arsip -- snapshot latency-compensated bakal ngelakuin hal
+    // yang sama, tapi baru SETELAH setDoc di bawah benar-benar kepanggil
+    // (bisa telat kalau lagi nunggu pendingReplyWrite).
+    if (currentListView !== "archived" && !searchQuery) removeCustomerRowEls(uid);
+  }
+
   try {
     // Tunggu balasan yang mungkin masih ditulis (writeMessage + touchCustomerDoc)
     // selesai dulu -- touchCustomerDoc menulis `archived: false` di akhir, jadi
@@ -1223,19 +1269,6 @@ async function toggleArchive(uid, archived) {
       ? { archived: true, archivedAt: serverTimestamp(), expireAt: oneYearFromNow() }
       : { archived: false, archivedAt: null, expireAt: null };
     await setDoc(doc(db, ...wsPath("customers", uid)), update, { merge: true });
-    // Diarsipkan sementara chat ini yang lagi kebuka -> tutup panelnya,
-    // soalnya begitu diarsipkan dia hilang dari daftar Open. Dipulihkan
-    // (un-archive) sengaja TIDAK ikut nutup, biar admin bisa lanjut chat.
-    if (archived && uid === activeCustomerUid) {
-      closeActiveChat();
-    } else if (archived) {
-      // Diarsipkan tanpa lewat closeActiveChat() (mis. admin keburu pindah
-      // ke chat lain selagi setDoc di atas masih jalan) -- draft yang belum
-      // terkirim buat chat ini sudah tidak relevan, buang biar tidak
-      // nyangkut jadi "Draft: ..." basi di sidebar.
-      draftMessages.delete(uid);
-      refreshDraftPreviewForRow(uid);
-    }
   } catch (err) {
     alert("Gagal mengubah status arsip: " + err.message);
   } finally {
@@ -1706,6 +1739,25 @@ function updatePresenceDots() {
     const dot = li.querySelector(".presence-dot");
     if (!data || !dot) return;
     dot.className = "presence-dot " + (isCustomerOnline(uid, data) ? "online" : "offline");
+  });
+}
+
+// Pindah highlight baris aktif + bersihin badge belum-dibaca-nya, TANPA
+// rebuild seluruh sidebar. Dulu tiap klik / pindah customer manggil
+// renderCustomerList() penuh -- bongkar-pasang SEMUA <li> (termasuk ratusan
+// baris hasil "muat customer lama" lewat scroll), bikin ganti chat kerasa
+// berat makin banyak chat yang dimuat. buildCustomerRowEl()/patchCustomerListFromChanges()
+// tetap sumber kebenaran markup-nya: begitu snapshot unreadCount:0 (di
+// openCustomer) atau pesan baru masuk, baris ini kerender ulang dari data
+// dan konsisten lagi -- edit tangan di sini cuma buat respons instan.
+function markActiveCustomerRow(uid) {
+  customerListEl.querySelectorAll(".customer-item.active").forEach((el) => el.classList.remove("active"));
+  const row = getCustomerRowEl(uid);
+  if (!row) return;
+  row.classList.add("active");
+  row.classList.remove("waiting");
+  row.querySelectorAll(".name-row .badge").forEach((b) => {
+    if (!b.classList.contains("archived-tag")) b.remove();
   });
 }
 
@@ -2285,7 +2337,7 @@ function openCustomer(uid, name) {
     setDoc(doc(db, ...wsPath("customers", uid)), { unreadCount: 0 }, { merge: true }).catch(() => {});
   }
 
-  renderCustomerList();
+  markActiveCustomerRow(uid);
   updateTypingPreview();
 
   if (unsubMessages) unsubMessages();
