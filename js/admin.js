@@ -84,6 +84,13 @@ let currentAdmin = null; // { uid, email, name, photo, workspaceId, workspaceNam
 let activeCustomerUid = null;
 let activeCustomerName = "";
 let editingCustomerNameUid = null; // lihat startEditCustomerName() & listenCustomers()
+// Balasan admin yang lagi ditulis ke Firestore (writeMessage + touchCustomerDoc).
+// touchCustomerDoc() menulis `archived: false` di akhir tiap balasan -- kalau
+// admin mengarsipkan tepat setelah membalas ("arsip cepat"), setDoc arsip
+// bisa keburu jalan lalu ke-timpa balik oleh touchCustomerDoc yang telat
+// selesai, jadi chat-nya kelihatan tidak benar-benar terarsip. toggleArchive()
+// menunggu promise ini dulu supaya penulisan arsip selalu jadi yang terakhir.
+let pendingReplyWrite = Promise.resolve();
 // Draft balasan yang belum dikirim, per customer (uid -> teks) -- supaya
 // ganti-ganti chat sebelum sempat klik kirim tidak bikin teksnya "lengket"
 // kebawa ke chat lain. Disimpan/dipulihkan di openCustomer().
@@ -534,8 +541,26 @@ document.addEventListener("keydown", (e) => {
   if (!activeCustomerUid || !customersDataMap.has(activeCustomerUid)) return;
 
   e.preventDefault();
-  const data = customersDataMap.get(activeCustomerUid);
-  toggleArchive(activeCustomerUid, !data.archived);
+  const uid = activeCustomerUid;
+  const data = customersDataMap.get(uid);
+  const wasArchived = !!data.archived;
+
+  // Alur triase: arsip -> lompat ke customer berikutnya -> arsip -> ...
+  // Tanpa ini, habis arsip chat aktif ditutup ke layar kosong; Alt+bawah
+  // sesudahnya (activeCustomerUid null) malah balik ke paling atas daftar,
+  // bukan lanjut ke yang berikutnya -- itu yang kerasa "kayak ada bug".
+  // Catat dulu SEBELUM toggleArchive() (yang langsung nutup chat & copot
+  // baris ini secara sinkron).
+  let nextEntry = null;
+  if (!wasArchived) {
+    const entries = getVisibleCustomerEntries();
+    const idx = entries.findIndex((en) => en.uid === uid);
+    if (idx !== -1) nextEntry = entries[idx + 1] || entries[idx - 1] || null;
+  }
+
+  toggleArchive(uid, !wasArchived);
+
+  if (nextEntry && nextEntry.uid !== uid) openCustomer(nextEntry.uid, nextEntry.name);
 });
 
 // Ctrl+/ (atau Cmd+/ di Mac) kapan saja membuka panel Saved Replies.
@@ -1093,6 +1118,13 @@ messageInput.addEventListener("input", () => {
 });
 
 messageInput.addEventListener("keydown", (e) => {
+  // Kombinasi Alt+... adalah shortcut dashboard (Alt+Enter = arsipkan,
+  // Alt+panah = pindah customer) yang ditangani listener level-document.
+  // Tanpa guard ini, Alt+Enter di dalam textarea ikut ke-tangkap di sini
+  // sebagai "Enter polos" -> requestSubmit() -> draft kekirim TANPA sengaja
+  // tepat sebelum chat-nya diarsipkan.
+  if (e.altKey) return;
+
   if (suggestionMatches.length > 0) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -1164,8 +1196,22 @@ function checkAutoArchive() {
 function closeActiveChat() {
   if (unsubMessages) unsubMessages();
   unsubMessages = null;
+
+  // closeActiveChat() itu satu-satunya jalan keluar chat yang TIDAK lewat
+  // openCustomer() (dipakai pas chat aktif diarsipkan/dihapus). Tanpa dua
+  // baris di bawah, teks yang belum terkirim: (1) ketinggalan nyangkut di
+  // <textarea> dan kelihatan "nempel" pas buka customer lain, (2) tetap
+  // kesimpan di draftMessages jadi "Draft: ..." basi yang muncul terus di
+  // preview sidebar tiap daftarnya ke-render ulang. Chat-nya sudah
+  // diarsipkan/dihapus -> draft-nya memang sudah tidak relevan, buang saja.
+  const closingUid = activeCustomerUid;
+  if (closingUid) draftMessages.delete(closingUid);
+
   activeCustomerUid = null;
   activeCustomerName = "";
+  messageInput.value = "";
+  autoResizeMessageInput();
+  if (closingUid) refreshDraftPreviewForRow(closingUid);
   chatHeaderText.textContent = "Pilih customer di sebelah kiri";
   updateChatHeaderPresence();
   infoToggleBtn.classList.add("hidden");
@@ -1175,20 +1221,58 @@ function closeActiveChat() {
   typingPreviewEl.classList.add("hidden");
 }
 
+const archiveInFlight = new Set();
+
 async function toggleArchive(uid, archived) {
+  // Cegah panggilan tumpang-tindih buat customer yang sama: Alt+Enter yang
+  // ke-repeat / dobel-klik tombol bisa nembak toggleArchive berkali-kali, dan
+  // begitu snapshot pertama (latency-compensated) sempat nge-flip
+  // customersDataMap ke archived:true selagi setDoc pertama masih jalan,
+  // trigger berikutnya baca `!data.archived` jadi false -> malah un-archive.
+  if (archiveInFlight.has(uid)) return;
+  archiveInFlight.add(uid);
+
+  // --- Reaksi UI INSTAN, sebelum nyentuh Firestore ---
+  // `await setDoc` di bawah baru resolve pas server ACK, dan kalau barusan
+  // ada balasan terkirim malah nunggu `pendingReplyWrite` (2 round-trip)
+  // dulu. Kalau tutup-chat & copot-baris ditaruh SETELAH await itu (perilaku
+  // lama), Alt+Enter buat arsip kerasa nge-lag ~0.5-2 detik: chat-nya masih
+  // kebuka penuh & barisnya masih nangkring di sidebar, jadi kayak nggak
+  // ngefek -- apalagi kalau langsung buru-buru pindah customer. Tulisan ke
+  // Firestore tetap jalan di bawah (urutannya dijaga), ini cuma UI-nya yang
+  // didahulukan.
+  if (archived) {
+    if (uid === activeCustomerUid) {
+      // Diarsipkan sementara chat ini yang lagi kebuka -> tutup panelnya,
+      // soalnya begitu diarsipkan dia hilang dari daftar Open.
+      closeActiveChat();
+    } else {
+      // Draft yang belum terkirim buat chat ini sudah tidak relevan, buang
+      // biar tidak nyangkut jadi "Draft: ..." basi di sidebar.
+      draftMessages.delete(uid);
+      refreshDraftPreviewForRow(uid);
+    }
+    // Copot barisnya sekarang juga kalau tab yang lagi kebuka memang tidak
+    // menampilkan arsip -- snapshot latency-compensated bakal ngelakuin hal
+    // yang sama, tapi baru SETELAH setDoc di bawah benar-benar kepanggil
+    // (bisa telat kalau lagi nunggu pendingReplyWrite).
+    if (currentListView !== "archived" && !searchQuery) removeCustomerRowEls(uid);
+  }
+
   try {
+    // Tunggu balasan yang mungkin masih ditulis (writeMessage + touchCustomerDoc)
+    // selesai dulu -- touchCustomerDoc menulis `archived: false` di akhir, jadi
+    // kalau tidak ditunggu, "arsip cepat setelah membalas" bisa ke-timpa balik
+    // dan chat-nya tidak benar-benar terarsip.
+    await pendingReplyWrite.catch(() => {});
     const update = archived
       ? { archived: true, archivedAt: serverTimestamp(), expireAt: oneYearFromNow() }
       : { archived: false, archivedAt: null, expireAt: null };
     await setDoc(doc(db, ...wsPath("customers", uid)), update, { merge: true });
-    // Diarsipkan sementara chat ini yang lagi kebuka -> tutup panelnya,
-    // soalnya begitu diarsipkan dia hilang dari daftar Open. Dipulihkan
-    // (un-archive) sengaja TIDAK ikut nutup, biar admin bisa lanjut chat.
-    if (archived && uid === activeCustomerUid) {
-      closeActiveChat();
-    }
   } catch (err) {
     alert("Gagal mengubah status arsip: " + err.message);
+  } finally {
+    archiveInFlight.delete(uid);
   }
 }
 
@@ -1655,6 +1739,25 @@ function updatePresenceDots() {
     const dot = li.querySelector(".presence-dot");
     if (!data || !dot) return;
     dot.className = "presence-dot " + (isCustomerOnline(uid, data) ? "online" : "offline");
+  });
+}
+
+// Pindah highlight baris aktif + bersihin badge belum-dibaca-nya, TANPA
+// rebuild seluruh sidebar. Dulu tiap klik / pindah customer manggil
+// renderCustomerList() penuh -- bongkar-pasang SEMUA <li> (termasuk ratusan
+// baris hasil "muat customer lama" lewat scroll), bikin ganti chat kerasa
+// berat makin banyak chat yang dimuat. buildCustomerRowEl()/patchCustomerListFromChanges()
+// tetap sumber kebenaran markup-nya: begitu snapshot unreadCount:0 (di
+// openCustomer) atau pesan baru masuk, baris ini kerender ulang dari data
+// dan konsisten lagi -- edit tangan di sini cuma buat respons instan.
+function markActiveCustomerRow(uid) {
+  customerListEl.querySelectorAll(".customer-item.active").forEach((el) => el.classList.remove("active"));
+  const row = getCustomerRowEl(uid);
+  if (!row) return;
+  row.classList.add("active");
+  row.classList.remove("waiting");
+  row.querySelectorAll(".name-row .badge").forEach((b) => {
+    if (!b.classList.contains("archived-tag")) b.remove();
   });
 }
 
@@ -2200,10 +2303,12 @@ async function deleteMessage(messageId) {
 }
 
 function openCustomer(uid, name) {
+  const switchingCustomer = activeCustomerUid !== uid;
+
   // Simpan draft chat yang lagi ditinggalkan (kalau ada isinya) sebelum
   // activeCustomerUid ditimpa -- kalau kosong, buang entry lamanya (misal
   // habis kirim) supaya map ini tidak numpuk draft basi selamanya.
-  if (activeCustomerUid && activeCustomerUid !== uid) {
+  if (activeCustomerUid && switchingCustomer) {
     const leavingDraft = messageInput.value;
     if (leavingDraft) draftMessages.set(activeCustomerUid, leavingDraft);
     else draftMessages.delete(activeCustomerUid);
@@ -2221,8 +2326,25 @@ function openCustomer(uid, name) {
   // kelihatan tombol yang bakal gagal).
   if (!isSuperadmin()) {
     messageForm.classList.remove("hidden");
-    messageInput.value = draftMessages.get(uid) || "";
-    autoResizeMessageInput();
+    // Cuma pulihkan/ganti isi <textarea> pas benar-benar PINDAH customer --
+    // klik ulang baris yang lagi aktif (sering kejadian: baris ke-rebuild
+    // tiap customer bales, lalu ke-klik lagi buat baca) TIDAK boleh nimpa
+    // teks yang lagi diketik admin.
+    if (switchingCustomer) {
+      messageInput.value = draftMessages.get(uid) || "";
+      // Draft yang lagi aktif hidup HANYA di <textarea>, bukan juga di
+      // draftMessages -- kalau ketinggalan di map, tiap openCustomer(uid)
+      // berikutnya nyuntik balik teks yang sebenarnya sudah dikirim ("draft
+      // muncul lagi tiap customer bales"). Map ini khusus chat yang TIDAK
+      // aktif; pas ditinggalkan nanti disimpan ulang dari messageInput di atas.
+      draftMessages.delete(uid);
+      autoResizeMessageInput();
+      // Saran saved-reply dari customer SEBELUMNYA sudah tidak relevan --
+      // kalau dropdown-nya masih kebuka, Enter pertama di chat baru ini
+      // ke-tangkap keydown handler sebagai "pilih saran", bukan "kirim", jadi
+      // draft yang harusnya kekirim + kebuang malah ketinggalan di map.
+      closeSuggestions();
+    }
     messageInput.focus();
   }
 
@@ -2234,7 +2356,7 @@ function openCustomer(uid, name) {
     setDoc(doc(db, ...wsPath("customers", uid)), { unreadCount: 0 }, { merge: true }).catch(() => {});
   }
 
-  renderCustomerList();
+  markActiveCustomerRow(uid);
   updateTypingPreview();
 
   if (unsubMessages) unsubMessages();
@@ -2430,9 +2552,9 @@ messagesEl.addEventListener("scroll", () => {
   if (messagesEl.scrollTop < 60) loadOlderMessages();
 });
 
-async function touchCustomerDoc(lastMessage) {
+async function touchCustomerDoc(lastMessage, uid = activeCustomerUid) {
   await setDoc(
-    doc(db, ...wsPath("customers", activeCustomerUid)),
+    doc(db, ...wsPath("customers", uid)),
     {
       lastMessage,
       lastMessageAt: serverTimestamp(),
@@ -2506,28 +2628,37 @@ messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text || !activeCustomerUid) return;
+  const targetUid = activeCustomerUid;
   messageInput.value = "";
+  // Draft yang disimpan draftMessages buat customer ini sudah kekirim --
+  // buang entry-nya, kalau tidak dia nyangkut jadi "Draft: ..." basi di
+  // preview sidebar & muncul lagi di kolom balas pas chat-nya dibuka ulang.
+  draftMessages.delete(targetUid);
+  closeSuggestions();
   autoResizeMessageInput();
 
-  try {
-    forceScrollToBottomNext = true;
-    await writeMessage(activeCustomerUid, {
-      sender: "admin",
-      senderId: currentAdmin.uid,
-      type: "text",
-      text,
-      senderName: currentAdmin.name,
-      senderPhoto: currentAdmin.photo || null,
-      timestamp: serverTimestamp()
-    });
-    recordFirstResponseIfNeeded(activeCustomerUid);
-    await touchCustomerDoc(text);
-    bumpStat("messageCount");
-    bumpStat("adminMessageCount");
-  } catch (err) {
-    forceScrollToBottomNext = false;
-    alert("Gagal mengirim balasan: " + err.message);
-  }
+  pendingReplyWrite = (async () => {
+    try {
+      forceScrollToBottomNext = true;
+      await writeMessage(targetUid, {
+        sender: "admin",
+        senderId: currentAdmin.uid,
+        type: "text",
+        text,
+        senderName: currentAdmin.name,
+        senderPhoto: currentAdmin.photo || null,
+        timestamp: serverTimestamp()
+      });
+      recordFirstResponseIfNeeded(targetUid);
+      await touchCustomerDoc(text, targetUid);
+      bumpStat("messageCount");
+      bumpStat("adminMessageCount");
+    } catch (err) {
+      forceScrollToBottomNext = false;
+      alert("Gagal mengirim balasan: " + err.message);
+    }
+  })();
+  await pendingReplyWrite;
 });
 
 // Dipakai baik oleh input file (klik ikon 🖼️) maupun paste screenshot
@@ -2563,25 +2694,28 @@ async function sendImageFile(file) {
     return;
   }
 
-  try {
-    forceScrollToBottomNext = true;
-    await writeMessage(targetUid, {
-      sender: "admin",
-      senderId: currentAdmin.uid,
-      type: "image",
-      imageBase64: dataUrl,
-      senderName: currentAdmin.name,
-      senderPhoto: currentAdmin.photo || null,
-      timestamp: serverTimestamp()
-    });
-    recordFirstResponseIfNeeded(targetUid);
-    await touchCustomerDoc("📷 Gambar");
-    bumpStat("messageCount");
-    bumpStat("adminMessageCount");
-  } catch (err) {
-    forceScrollToBottomNext = false;
-    alert(err.message || "Gagal mengirim gambar.");
-  }
+  pendingReplyWrite = (async () => {
+    try {
+      forceScrollToBottomNext = true;
+      await writeMessage(targetUid, {
+        sender: "admin",
+        senderId: currentAdmin.uid,
+        type: "image",
+        imageBase64: dataUrl,
+        senderName: currentAdmin.name,
+        senderPhoto: currentAdmin.photo || null,
+        timestamp: serverTimestamp()
+      });
+      recordFirstResponseIfNeeded(targetUid);
+      await touchCustomerDoc("📷 Gambar", targetUid);
+      bumpStat("messageCount");
+      bumpStat("adminMessageCount");
+    } catch (err) {
+      forceScrollToBottomNext = false;
+      alert(err.message || "Gagal mengirim gambar.");
+    }
+  })();
+  await pendingReplyWrite;
 }
 
 imageInput.addEventListener("change", async () => {

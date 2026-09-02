@@ -544,12 +544,15 @@ function updateChatHeader() {
   chatHeader.appendChild(span);
 }
 
-// lockedUntilMs (opsional): kalau customer ini masih dalam masa kunci spam
-// dari sesi sebelumnya (lihat triggerSpamLock/nextRepeatFields) -- dibaca
-// dari field lockedUntil dokumen customers/{uid} yang sudah ada SEBELUM
-// enterChat dipanggil, jadi kunci ini tetap berlaku walau halaman di-reload
-// (bukan cuma variabel in-memory yang hilang pas reload).
-function enterChat(uid, name, lockedUntilMs = 0) {
+// existingData (opsional): dokumen customers/{uid} yang sudah ada SEBELUM
+// enterChat dipanggil. Dipakai buat memulihkan state anti-spam dari sesi
+// sebelumnya supaya tetap berlaku walau halaman di-reload / ganti tab (bukan
+// cuma variabel in-memory yang hilang):
+//  - lockedUntil  -> masa kunci spam "pesan berulang" yang masih jalan
+//  - repeatText/repeatCount/repeatWindowStart -> counter pesan-berulang, biar
+//    customer tidak bisa nol-in counter dengan reload tiap 3-4 pesan sebelum
+//    pesan ke-5 sempat menyalakan lock (lihat nextRepeatFields).
+function enterChat(uid, name, existingData = null) {
   sessionActive = true;
   currentUser = { uid, name };
   loginScreen.classList.add("hidden");
@@ -562,9 +565,19 @@ function enterChat(uid, name, lockedUntilMs = 0) {
   if (lastSeenIntervalId) clearInterval(lastSeenIntervalId);
   lastSeenIntervalId = setInterval(refreshLastSeen, LAST_SEEN_REFRESH_MS);
 
-  if (lockedUntilMs > Date.now()) {
-    spamLockedUntilMs = lockedUntilMs;
-    triggerSpamLock(false);
+  if (existingData) {
+    const winMs = existingData.repeatWindowStart ? existingData.repeatWindowStart.toMillis() : 0;
+    if (winMs && Date.now() - winMs <= REPEAT_WINDOW_MS) {
+      repeatText = existingData.repeatText || null;
+      repeatCount = existingData.repeatCount || 0;
+      repeatWindowStartMs = winMs;
+    }
+
+    const lockedUntilMs = existingData.lockedUntil ? existingData.lockedUntil.toMillis() : 0;
+    if (lockedUntilMs > Date.now()) {
+      spamLockedUntilMs = lockedUntilMs;
+      triggerSpamLock(false);
+    }
   }
 }
 
@@ -575,7 +588,27 @@ function enterChat(uid, name, lockedUntilMs = 0) {
 function listenSessionAlive(uid) {
   if (unsubCustomerDoc) unsubCustomerDoc();
   unsubCustomerDoc = onSnapshot(doc(db, ...wsPath("customers", uid)), (snap) => {
-    if (!snap.exists()) handleSessionDeleted();
+    if (!snap.exists()) {
+      handleSessionDeleted();
+      return;
+    }
+    const data = snap.data();
+    // Kalau lock spam "pesan berulang" dinyalakan dari tab / perangkat lain
+    // (atau langsung server-side lewat customerNotRepeatSpamming), ikut kunci
+    // form di tab ini juga -- jangan sampai satu tab masih bisa lanjut ngirim
+    // padahal instance lain milik customer yang sama sudah kena.
+    const lockedUntilMs = data.lockedUntil ? data.lockedUntil.toMillis() : 0;
+    if (lockedUntilMs > Date.now() && lockedUntilMs > spamLockedUntilMs) {
+      spamLockedUntilMs = lockedUntilMs;
+      triggerSpamLock(false);
+    }
+    // Kalau admin meng-edit nama customer selagi sesi jalan, ikut update di
+    // sini supaya currentUser.name (dipakai presencePayload dsb) tidak basi.
+    const docName = data.name;
+    if (docName && currentUser && docName !== currentUser.name) {
+      currentUser.name = docName;
+      if (rtdb) goOnlineRtdb();
+    }
   });
 }
 
@@ -929,24 +962,47 @@ let repeatWindowStartMs = 0;
 let repeatCount = 0;
 let spamLockedUntilMs = 0;
 
+// Kunci "lagi mengirim" -- pesan customer dikirim satu per satu. Tanpa ini,
+// Enter yang ditahan / submit beruntun / klik ganda bikin beberapa
+// sendTextMessage() jalan PARALEL: semuanya lolos guard spamLockedUntilMs
+// secara sinkron SEBELUM pesan ke-5 sempat menyalakan lock, jadi 10+ pesan
+// sama bisa tembus sebelum sesi kekunci. Dengan serialisasi ini, counter
+// pesan-berulang naik urut dan lock nyala tepat waktu.
+let sendInFlight = false;
+
 function nextRepeatFields(text) {
   const now = Date.now();
-  const isSameBurst = text === repeatText && now - repeatWindowStartMs <= REPEAT_WINDOW_MS;
-  if (isSameBurst) {
+  // Ambang 10 detik dihitung dari pesan SAMA yang TERAKHIR, bukan yang
+  // pertama -- dulu repeatWindowStartMs cuma di-set pas ganti teks, jadi
+  // customer yang nge-drip pesan sama tiap ~9 detik tidak pernah kena
+  // (pesan ke-2 sudah lewat 10 detik dari pesan ke-1 -> counter reset).
+  const isSameRepeat = text === repeatText && now - repeatWindowStartMs <= REPEAT_WINDOW_MS;
+  if (isSameRepeat) {
     repeatCount++;
   } else {
     repeatText = text;
-    repeatWindowStartMs = now;
     repeatCount = 1;
   }
+  repeatWindowStartMs = now;
+
+  // repeatText/repeatCount/repeatWindowStart ikut ditulis ke dokumen customer
+  // (dulu cuma in-memory) supaya rule customerNotRepeatSpamming di
+  // firestore.rules bisa menegakkan batas ini server-side. repeatCount dinaikin
+  // pakai increment() pas teksnya sama beruntun -- jadi customer yang reload
+  // halaman / buka tab kedua buat nol-in counter in-memory tetap ke-hitung di
+  // server dan pesan ke-6 yang persis sama (dalam 10 detik) ditolak. Pas teks
+  // berubah / window kedaluwarsa, di-set absolut ke 1.
+  const repeatFields = isSameRepeat
+    ? { repeatText: text, repeatCount: increment(1), repeatWindowStart: serverTimestamp() }
+    : { repeatText: text, repeatCount: 1, repeatWindowStart: serverTimestamp() };
 
   if (repeatCount >= REPEAT_LIMIT) {
     spamLockedUntilMs = now + SPAM_LOCKOUT_MS;
     repeatText = null;
     repeatCount = 0;
-    return { lockedUntil: Timestamp.fromMillis(spamLockedUntilMs) };
+    return { ...repeatFields, lockedUntil: Timestamp.fromMillis(spamLockedUntilMs) };
   }
-  return {};
+  return repeatFields;
 }
 
 let spamLockIntervalId = null;
@@ -1001,11 +1057,21 @@ function triggerSpamLock(isFreshTrigger) {
   }
 }
 
-async function touchCustomerDoc(lastMessage) {
+// repeatFields dihitung pemanggil (nextRepeatFields) dan cuma diisi buat
+// pesan TEKS -- kiriman gambar lewat sini dengan lastMessage "📷 Gambar" yang
+// selalu identik, jadi kalau ikut dihitung, customer yang kirim 5 foto
+// (mis. foto produk/struk) kena kunci "pesan berulang" 5 menit padahal
+// gambarnya beda-beda. Burst limit (5 pesan/3 detik) tetap berlaku buat
+// gambar lewat nextBurstFields().
+async function touchCustomerDoc(lastMessage, repeatFields = {}) {
   await setDoc(
     doc(db, ...wsPath("customers", currentUser.uid)),
     {
-      name: currentUser.name,
+      // `name` SENGAJA tidak ditulis di sini. Dokumen customer selalu sudah
+      // punya nama sebelum pesan pertama bisa dikirim (diisi startChat /
+      // auto-rejoin), dan menulisnya ulang tiap pesan bikin edit nama dari
+      // sisi admin ke-timpa balik ke nama lama yang diketik customer tiap
+      // kali customer lanjut chat -- persis keluhan "nama balik lagi".
       lastMessage,
       lastMessageAt: serverTimestamp(),
       lastSender: "customer",
@@ -1015,7 +1081,7 @@ async function touchCustomerDoc(lastMessage) {
       expireAt: null,
       typingDraft: null,
       ...nextBurstFields(),
-      ...nextRepeatFields(lastMessage)
+      ...repeatFields
     },
     { merge: true }
   );
@@ -1092,32 +1158,38 @@ messageInput.addEventListener("input", () => {
 // touchCustomerDoc -> bumpStat yang persis sama.
 async function sendTextMessage(text) {
   if (!text || !currentUser || !sessionActive || spamLockedUntilMs > Date.now()) return;
+  if (sendInFlight) return;
+  sendInFlight = true;
 
   try {
-    forceScrollToBottomNext = true;
-    await writeMessage(currentUser.uid, {
-      sender: "customer",
-      type: "text",
-      text,
-      timestamp: serverTimestamp()
-    });
-  } catch (err) {
-    forceScrollToBottomNext = false;
-    console.error("Gagal addDoc ke chats/" + currentUser.uid + "/messages:", err);
-    alert("Gagal mengirim pesan (tulis chat): " + err.code + " - " + err.message);
-    return;
-  }
+    try {
+      forceScrollToBottomNext = true;
+      await writeMessage(currentUser.uid, {
+        sender: "customer",
+        type: "text",
+        text,
+        timestamp: serverTimestamp()
+      });
+    } catch (err) {
+      forceScrollToBottomNext = false;
+      console.error("Gagal addDoc ke chats/" + currentUser.uid + "/messages:", err);
+      alert("Gagal mengirim pesan (tulis chat): " + err.code + " - " + err.message);
+      return;
+    }
 
-  try {
-    await touchCustomerDoc(text);
-  } catch (err) {
-    console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
-    alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
-    return;
-  }
+    try {
+      await touchCustomerDoc(text, nextRepeatFields(text));
+    } catch (err) {
+      console.error("Gagal setDoc ke customers/" + currentUser.uid + ":", err);
+      alert("Gagal mengirim pesan (update profil customer): " + err.code + " - " + err.message);
+      return;
+    }
 
-  bumpStat("messageCount");
-  bumpStat("customerMessageCount");
+    bumpStat("messageCount");
+    bumpStat("customerMessageCount");
+  } finally {
+    sendInFlight = false;
+  }
 }
 
 // Customer cuma boleh pakai tombol pilihan bantuan maksimal 2x per sesi chat
@@ -1220,6 +1292,10 @@ messageForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text) return;
+  // Kalau masih ada kiriman jalan, JANGAN kosongkan input -- biarkan teksnya
+  // tetap di kolom biar customer tinggal Enter lagi, bukan hilang begitu saja
+  // (submit beruntun selagi sendTextMessage() belum kelar).
+  if (sendInFlight) return;
   messageInput.value = "";
   await sendTextMessage(text);
 });
@@ -1308,9 +1384,14 @@ startBtn.addEventListener("click", async () => {
     optionSelectCount = isNewCustomer || sessionReset ? 0 : existingData.optionSelectCount || 0;
 
     const initialUpdate = {
-      name,
       lastSeenAt: serverTimestamp()
     };
+    // Nama cuma ditulis buat customer baru (atau dokumen lama yang entah
+    // kenapa belum punya nama). Buat customer lama yang namanya sudah ada,
+    // JANGAN di-timpa nama yang baru diketik di form -- kalau admin sempat
+    // meng-edit namanya, ketikan customer di sini (mis. reload lalu "Masuk"
+    // lagi) akan mengembalikannya ke nama lama.
+    if (isNewCustomer || !existingData?.name) initialUpdate.name = name;
     // Cuma diinisialisasi kosong buat customer BARU -- dulu 3 field ini
     // ditulis tanpa syarat di sini, jadi kalau customer LAMA sempat
     // nyampe form ini (race: loadInitialDataInBackground() punya
@@ -1341,7 +1422,9 @@ startBtn.addEventListener("click", async () => {
 
     await setDoc(doc(db, ...wsPath("customers", user.uid)), initialUpdate, { merge: true });
     if (isNewCustomer) bumpStat("newCustomers");
-    enterChat(user.uid, name, existingData?.lockedUntil ? existingData.lockedUntil.toMillis() : 0);
+    // Nama yang dipakai sesi = nama tersimpan (bisa jadi sudah di-edit admin)
+    // kalau customer lama, bukan yang baru diketik di form.
+    enterChat(user.uid, existingData?.name || name, existingData || null);
     captureVisitorInfo(user.uid);
 
     if (isNewCustomer && autoGreetingEnabled) {
@@ -1504,7 +1587,7 @@ function loadInitialDataInBackground(onBrandingSettled) {
       const data = customerSnap.data();
       const sessionReset = sessionShouldReset(data);
       optionSelectCount = sessionReset ? 0 : data.optionSelectCount || 0;
-      enterChat(user.uid, data.name, data.lockedUntil ? data.lockedUntil.toMillis() : 0);
+      enterChat(user.uid, data.name, data);
       captureVisitorInfo(user.uid);
 
       const seenUpdate = { lastSeenAt: serverTimestamp() };
