@@ -155,6 +155,28 @@ service cloud.firestore {
           request.time > cust.data.lockedUntil;
       }
 
+      // Batas "pesan berulang" versi server. DULU deteksi 5 pesan persis sama
+      // dalam 10 detik cuma dihitung di memory customer.js -- customer tinggal
+      // reload halaman / buka tab baru tiap 3-4 pesan buat nol-in counter itu,
+      // jadi lock 5 menit tidak pernah kepicu. SEKARANG customer.js nulis
+      // repeatText/repeatCount/repeatWindowStart ke dokumen customer SESUDAH
+      // tiap pesan teks sukses (repeatCount pakai increment() pas teksnya sama
+      // beruntun), dan rule ini BACA nilai yg sudah ada -- jadi hitungan di
+      // server tetap nanjak lintas reload/tab dan pesan ke-6 yang persis sama
+      // (dalam 10 detik) ditolak di sini, bukan cuma ngandelin JS browsernya
+      // nyalain lock. Cuma dipanggil buat pesan teks (lihat pemakaian di
+      // bawah) -- kiriman gambar tetap cukup dibatasi customerNotSpamming().
+      function customerNotRepeatSpamming(customerId) {
+        let cust = get(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId));
+        return !('repeatCount' in cust.data) ||
+          cust.data.repeatCount == null ||
+          cust.data.repeatText != request.resource.data.text ||
+          !('repeatWindowStart' in cust.data) ||
+          cust.data.repeatWindowStart == null ||
+          request.time > cust.data.repeatWindowStart + duration.value(10, 's') ||
+          cust.data.repeatCount < 5;
+      }
+
       allow update: if isWorkspaceOperator() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['brandName', 'themeColor', 'bubbleIcon', 'bubbleImageBase64', 'headerLogoBase64',
@@ -231,7 +253,8 @@ service cloud.firestore {
           (request.resource.data.type != 'text' || request.resource.data.text.size() <= 4000) &&
           exists(/databases/$(database)/documents/workspaces/$(workspaceId)/customers/$(customerId)) &&
           customerNotSpamming(customerId) &&
-          customerNotLocked(customerId);
+          customerNotLocked(customerId) &&
+          (request.resource.data.type != 'text' || customerNotRepeatSpamming(customerId));
 
         allow create: if isWorkspaceOperator() &&
           request.resource.data.sender == 'admin' &&

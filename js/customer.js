@@ -544,12 +544,15 @@ function updateChatHeader() {
   chatHeader.appendChild(span);
 }
 
-// lockedUntilMs (opsional): kalau customer ini masih dalam masa kunci spam
-// dari sesi sebelumnya (lihat triggerSpamLock/nextRepeatFields) -- dibaca
-// dari field lockedUntil dokumen customers/{uid} yang sudah ada SEBELUM
-// enterChat dipanggil, jadi kunci ini tetap berlaku walau halaman di-reload
-// (bukan cuma variabel in-memory yang hilang pas reload).
-function enterChat(uid, name, lockedUntilMs = 0) {
+// existingData (opsional): dokumen customers/{uid} yang sudah ada SEBELUM
+// enterChat dipanggil. Dipakai buat memulihkan state anti-spam dari sesi
+// sebelumnya supaya tetap berlaku walau halaman di-reload / ganti tab (bukan
+// cuma variabel in-memory yang hilang):
+//  - lockedUntil  -> masa kunci spam "pesan berulang" yang masih jalan
+//  - repeatText/repeatCount/repeatWindowStart -> counter pesan-berulang, biar
+//    customer tidak bisa nol-in counter dengan reload tiap 3-4 pesan sebelum
+//    pesan ke-5 sempat menyalakan lock (lihat nextRepeatFields).
+function enterChat(uid, name, existingData = null) {
   sessionActive = true;
   currentUser = { uid, name };
   loginScreen.classList.add("hidden");
@@ -562,9 +565,19 @@ function enterChat(uid, name, lockedUntilMs = 0) {
   if (lastSeenIntervalId) clearInterval(lastSeenIntervalId);
   lastSeenIntervalId = setInterval(refreshLastSeen, LAST_SEEN_REFRESH_MS);
 
-  if (lockedUntilMs > Date.now()) {
-    spamLockedUntilMs = lockedUntilMs;
-    triggerSpamLock(false);
+  if (existingData) {
+    const winMs = existingData.repeatWindowStart ? existingData.repeatWindowStart.toMillis() : 0;
+    if (winMs && Date.now() - winMs <= REPEAT_WINDOW_MS) {
+      repeatText = existingData.repeatText || null;
+      repeatCount = existingData.repeatCount || 0;
+      repeatWindowStartMs = winMs;
+    }
+
+    const lockedUntilMs = existingData.lockedUntil ? existingData.lockedUntil.toMillis() : 0;
+    if (lockedUntilMs > Date.now()) {
+      spamLockedUntilMs = lockedUntilMs;
+      triggerSpamLock(false);
+    }
   }
 }
 
@@ -579,9 +592,19 @@ function listenSessionAlive(uid) {
       handleSessionDeleted();
       return;
     }
+    const data = snap.data();
+    // Kalau lock spam "pesan berulang" dinyalakan dari tab / perangkat lain
+    // (atau langsung server-side lewat customerNotRepeatSpamming), ikut kunci
+    // form di tab ini juga -- jangan sampai satu tab masih bisa lanjut ngirim
+    // padahal instance lain milik customer yang sama sudah kena.
+    const lockedUntilMs = data.lockedUntil ? data.lockedUntil.toMillis() : 0;
+    if (lockedUntilMs > Date.now() && lockedUntilMs > spamLockedUntilMs) {
+      spamLockedUntilMs = lockedUntilMs;
+      triggerSpamLock(false);
+    }
     // Kalau admin meng-edit nama customer selagi sesi jalan, ikut update di
     // sini supaya currentUser.name (dipakai presencePayload dsb) tidak basi.
-    const docName = snap.data().name;
+    const docName = data.name;
     if (docName && currentUser && docName !== currentUser.name) {
       currentUser.name = docName;
       if (rtdb) goOnlineRtdb();
@@ -962,13 +985,24 @@ function nextRepeatFields(text) {
   }
   repeatWindowStartMs = now;
 
+  // repeatText/repeatCount/repeatWindowStart ikut ditulis ke dokumen customer
+  // (dulu cuma in-memory) supaya rule customerNotRepeatSpamming di
+  // firestore.rules bisa menegakkan batas ini server-side. repeatCount dinaikin
+  // pakai increment() pas teksnya sama beruntun -- jadi customer yang reload
+  // halaman / buka tab kedua buat nol-in counter in-memory tetap ke-hitung di
+  // server dan pesan ke-6 yang persis sama (dalam 10 detik) ditolak. Pas teks
+  // berubah / window kedaluwarsa, di-set absolut ke 1.
+  const repeatFields = isSameRepeat
+    ? { repeatText: text, repeatCount: increment(1), repeatWindowStart: serverTimestamp() }
+    : { repeatText: text, repeatCount: 1, repeatWindowStart: serverTimestamp() };
+
   if (repeatCount >= REPEAT_LIMIT) {
     spamLockedUntilMs = now + SPAM_LOCKOUT_MS;
     repeatText = null;
     repeatCount = 0;
-    return { lockedUntil: Timestamp.fromMillis(spamLockedUntilMs) };
+    return { ...repeatFields, lockedUntil: Timestamp.fromMillis(spamLockedUntilMs) };
   }
-  return {};
+  return repeatFields;
 }
 
 let spamLockIntervalId = null;
@@ -1390,7 +1424,7 @@ startBtn.addEventListener("click", async () => {
     if (isNewCustomer) bumpStat("newCustomers");
     // Nama yang dipakai sesi = nama tersimpan (bisa jadi sudah di-edit admin)
     // kalau customer lama, bukan yang baru diketik di form.
-    enterChat(user.uid, existingData?.name || name, existingData?.lockedUntil ? existingData.lockedUntil.toMillis() : 0);
+    enterChat(user.uid, existingData?.name || name, existingData || null);
     captureVisitorInfo(user.uid);
 
     if (isNewCustomer && autoGreetingEnabled) {
@@ -1553,7 +1587,7 @@ function loadInitialDataInBackground(onBrandingSettled) {
       const data = customerSnap.data();
       const sessionReset = sessionShouldReset(data);
       optionSelectCount = sessionReset ? 0 : data.optionSelectCount || 0;
-      enterChat(user.uid, data.name, data.lockedUntil ? data.lockedUntil.toMillis() : 0);
+      enterChat(user.uid, data.name, data);
       captureVisitorInfo(user.uid);
 
       const seenUpdate = { lastSeenAt: serverTimestamp() };

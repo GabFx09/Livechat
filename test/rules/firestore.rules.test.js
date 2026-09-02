@@ -286,6 +286,97 @@ test("chats: pesan customer LOLOS kalau lockedUntil sudah lewat", async () => {
   );
 });
 
+test("chats: anti-spam menolak pesan teks ke-6 yang persis sama dalam 10 detik", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    repeatText: "spam sama terus",
+    repeatCount: 5,
+    repeatWindowStart: Timestamp.now()
+  });
+  const db = asCustomer();
+  await assertFails(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "spam sama terus",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("chats: pesan teks LOLOS kalau teksnya beda dari repeatText tersimpan", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    repeatText: "spam sama terus",
+    repeatCount: 5,
+    repeatWindowStart: Timestamp.now()
+  });
+  const db = asCustomer();
+  await assertSucceeds(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "kalimat yang berbeda",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("chats: pesan teks berulang LOLOS kalau window 10 detik sudah lewat", async () => {
+  const past = Timestamp.fromMillis(Date.now() - 11000);
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    repeatText: "spam sama terus",
+    repeatCount: 5,
+    repeatWindowStart: past
+  });
+  const db = asCustomer();
+  await assertSucceeds(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "spam sama terus",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("chats: pesan teks berulang LOLOS kalau repeatCount masih di bawah 5", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    repeatText: "spam sama terus",
+    repeatCount: 4,
+    repeatWindowStart: Timestamp.now()
+  });
+  const db = asCustomer();
+  await assertSucceeds(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "text",
+      text: "spam sama terus",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
+test("chats: kiriman gambar TIDAK kena batas pesan-berulang (repeatCount tinggi diabaikan)", async () => {
+  await seed(["workspaces", WS, "customers", CUSTOMER], {
+    name: "Budi",
+    repeatText: "📷 Gambar",
+    repeatCount: 5,
+    repeatWindowStart: Timestamp.now()
+  });
+  const db = asCustomer();
+  await assertSucceeds(
+    addDoc(collection(db, "workspaces", WS, "chats", CUSTOMER, "messages"), {
+      sender: "customer",
+      type: "image",
+      imageBase64: "data:image/png;base64,AAAA",
+      timestamp: Timestamp.now()
+    })
+  );
+});
+
 test("chats: admin boleh kirim balasan dengan senderId uid sendiri", async () => {
   await seed(["workspaces", WS, "customers", CUSTOMER], { name: "Budi" });
   const db = asAdmin();
