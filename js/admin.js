@@ -2303,10 +2303,12 @@ async function deleteMessage(messageId) {
 }
 
 function openCustomer(uid, name) {
+  const switchingCustomer = activeCustomerUid !== uid;
+
   // Simpan draft chat yang lagi ditinggalkan (kalau ada isinya) sebelum
   // activeCustomerUid ditimpa -- kalau kosong, buang entry lamanya (misal
   // habis kirim) supaya map ini tidak numpuk draft basi selamanya.
-  if (activeCustomerUid && activeCustomerUid !== uid) {
+  if (activeCustomerUid && switchingCustomer) {
     const leavingDraft = messageInput.value;
     if (leavingDraft) draftMessages.set(activeCustomerUid, leavingDraft);
     else draftMessages.delete(activeCustomerUid);
@@ -2324,8 +2326,25 @@ function openCustomer(uid, name) {
   // kelihatan tombol yang bakal gagal).
   if (!isSuperadmin()) {
     messageForm.classList.remove("hidden");
-    messageInput.value = draftMessages.get(uid) || "";
-    autoResizeMessageInput();
+    // Cuma pulihkan/ganti isi <textarea> pas benar-benar PINDAH customer --
+    // klik ulang baris yang lagi aktif (sering kejadian: baris ke-rebuild
+    // tiap customer bales, lalu ke-klik lagi buat baca) TIDAK boleh nimpa
+    // teks yang lagi diketik admin.
+    if (switchingCustomer) {
+      messageInput.value = draftMessages.get(uid) || "";
+      // Draft yang lagi aktif hidup HANYA di <textarea>, bukan juga di
+      // draftMessages -- kalau ketinggalan di map, tiap openCustomer(uid)
+      // berikutnya nyuntik balik teks yang sebenarnya sudah dikirim ("draft
+      // muncul lagi tiap customer bales"). Map ini khusus chat yang TIDAK
+      // aktif; pas ditinggalkan nanti disimpan ulang dari messageInput di atas.
+      draftMessages.delete(uid);
+      autoResizeMessageInput();
+      // Saran saved-reply dari customer SEBELUMNYA sudah tidak relevan --
+      // kalau dropdown-nya masih kebuka, Enter pertama di chat baru ini
+      // ke-tangkap keydown handler sebagai "pilih saran", bukan "kirim", jadi
+      // draft yang harusnya kekirim + kebuang malah ketinggalan di map.
+      closeSuggestions();
+    }
     messageInput.focus();
   }
 
@@ -2615,6 +2634,7 @@ messageForm.addEventListener("submit", async (e) => {
   // buang entry-nya, kalau tidak dia nyangkut jadi "Draft: ..." basi di
   // preview sidebar & muncul lagi di kolom balas pas chat-nya dibuka ulang.
   draftMessages.delete(targetUid);
+  closeSuggestions();
   autoResizeMessageInput();
 
   pendingReplyWrite = (async () => {
